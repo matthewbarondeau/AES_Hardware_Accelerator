@@ -28,7 +28,7 @@ slv_regB[31:0] = aes_digest_reg[31:0]
 
 ### BRAM order
 ```
-key 	= {block_reg[0], block_reg[1], block_reg[2], block_reg[3],  
+key   = {block_reg[0], block_reg[1], block_reg[2], block_reg[3],  
          block_reg[4], block_reg[5], block_reg[6], block_reg[7]};  
 
 chunk = {block_reg[8], block_reg[9],  
