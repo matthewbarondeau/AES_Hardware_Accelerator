@@ -12,7 +12,7 @@ An implementation of AES encryption using hardware acceleration on the Zedboard.
 
 ### Register map
 ```
-slv_reg0[31:0]  
+slv_reg0[31:0] = {30'bo, reset_n, start_axi}  
 slv_reg1[31:0] = {30'b0, aes_complete, aes_digest_valid}  
 slv_reg2[31:0] = axi_bram_addr  
 slv_reg3[31:0] = axi_bram_read_data  
