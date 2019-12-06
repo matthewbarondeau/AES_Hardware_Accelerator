@@ -119,6 +119,7 @@ module AES_TOP(
 				NXT_STATE		<= AES_READ1;
 			end else if((STATE == INIT) && (axi_start_aes == 1'b0)) begin
 				NXT_STATE <= INIT;
+				aes_complete <= 1'b0;
 			end else if(STATE == AES_READ1) begin
 				aes_start_read <= 1'b1;
 				NXT_STATE <= AES_READ2;

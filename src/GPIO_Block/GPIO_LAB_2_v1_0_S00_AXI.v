@@ -750,8 +750,8 @@
     assign cap_timer_in[31:0] = slv_reg3[31:0];
         
 	//Writing to register port slv_reg1[15:8] will be used to drive the "JA" PMOD port
-    assign JA1 = slv_reg0[0];   //this guy should be set 1 when slv_reg1[15] is a 1
-    assign JA2 = slv_reg1[9];
+    assign JA1 = capture_gate;   //this guy should be set 1 when slv_reg1[15] is a 1
+    assign JA2 = interrupt_out;
     assign JA3 = slv_reg1[10];
     assign JA4 = slv_reg1[11];
     assign JA7 = slv_reg1[12];
