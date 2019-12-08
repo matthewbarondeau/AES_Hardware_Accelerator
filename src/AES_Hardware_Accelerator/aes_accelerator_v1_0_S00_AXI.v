@@ -113,6 +113,10 @@
 	wire		aes_digest_valid;
 	wire		aes_complete;
 	wire   [31:0]  aes_bram_addr;
+	wire   [4:0]   aes_state;
+	wire   [255:0] aes_key;
+	wire   [127:0] aes_block;
+
 
 
 
@@ -703,19 +707,19 @@
 	        5'h09   : reg_data_out <= aes_digest_reg[95:64];
 	        5'h0A   : reg_data_out <= aes_digest_reg[63:32];
 	        5'h0B   : reg_data_out <= aes_digest_reg[31:0];
-	        5'h0C   : reg_data_out <= slv_reg12;
-	        5'h0D   : reg_data_out <= slv_reg13;
-	        5'h0E   : reg_data_out <= slv_reg14;
-	        5'h0F   : reg_data_out <= slv_reg15;
-	        5'h10   : reg_data_out <= slv_reg16;
-	        5'h11   : reg_data_out <= slv_reg17;
-	        5'h12   : reg_data_out <= slv_reg18;
-	        5'h13   : reg_data_out <= slv_reg19;
-	        5'h14   : reg_data_out <= slv_reg20;
-	        5'h15   : reg_data_out <= slv_reg21;
-	        5'h16   : reg_data_out <= slv_reg22;
-	        5'h17   : reg_data_out <= slv_reg23;
-	        5'h18   : reg_data_out <= slv_reg24;
+	        5'h0C   : reg_data_out <= aes_state;
+	        5'h0D   : reg_data_out <= aes_key[255:224];
+	        5'h0E   : reg_data_out <= aes_key[223:192];
+	        5'h0F   : reg_data_out <= aes_key[191:160];
+	        5'h10   : reg_data_out <= aes_key[159:128];
+	        5'h11   : reg_data_out <= aes_key[127:96];
+	        5'h12   : reg_data_out <= aes_key[95:64];
+	        5'h13   : reg_data_out <= aes_key[63:32];
+	        5'h14   : reg_data_out <= aes_key[31:0];
+	        5'h15   : reg_data_out <= aes_block[127:96];
+	        5'h16   : reg_data_out <= aes_block[95:64];
+	        5'h17   : reg_data_out <= aes_block[63:32];
+	        5'h18   : reg_data_out <= aes_block[31:0];
 	        5'h19   : reg_data_out <= slv_reg25;
 	        5'h1A   : reg_data_out <= slv_reg26;
 	        5'h1B   : reg_data_out <= slv_reg27;
@@ -747,6 +751,14 @@
 	end    
 
 	// Add user logic here
+	
+		
+    assign aes_key     = { slv_reg13, slv_reg14, slv_reg15, slv_reg16,
+                           slv_reg17, slv_reg18, slv_reg19, slv_reg20};
+                           
+    assign aes_block   = { slv_reg21, slv_reg22, slv_reg23, slv_reg24};
+                           
+                           
     always @( posedge S_AXI_ACLK)
     begin
         if ( S_AXI_ARESETN == 1'b0 ) 
@@ -807,7 +819,10 @@
         
         .aes_start_read(aes_start_read),
         .aes_bram_addr(aes_bram_addr),
-        .aes_bram_read_data(aes_bram_read_data)
+        .aes_bram_read_data(aes_bram_read_data),
+        .aes_state(aes_state),
+        .aes_key_input(aes_key),
+        .aes_block_input(aes_block)
          );
                     
 

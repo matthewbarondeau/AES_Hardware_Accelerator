@@ -33,7 +33,10 @@ module AES_TOP(
 
 	output reg			aes_start_read,
 	output reg	[31:0]	aes_bram_addr,
-	input  wire	[31:0]	aes_bram_read_data
+	input  wire	[31:0]	aes_bram_read_data,
+	output wire [4:0]   aes_state,
+	input  wire [255:0] aes_key_input,
+	input  wire [127:0] aes_block_input
     );
 
 
@@ -65,6 +68,8 @@ module AES_TOP(
 
   	assign core_block  	= {	block_reg[8], block_reg[9],
                         	block_reg[10], block_reg[11]};
+                        	
+    assign aes_state    = STATE;
 
 	localparam
 			INIT		= 0,
@@ -208,10 +213,10 @@ module AES_TOP(
 		.next(next_chunk),
 		.ready(aes_idle),
 		
-		.key(core_key),
+		.key(aes_key_input),
 		.keylen(1'b1),	// 1 for 256 bit, 0 for 128
 		
-		.block(core_block),
+		.block(aes_block_input),
 		.result(aes_result),
 		.result_valid(aes_digest_valid)
 	);
