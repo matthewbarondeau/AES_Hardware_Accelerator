@@ -68,7 +68,7 @@ module AES_TOP(
                         	block_reg[10], block_reg[11]};
 
 	localparam
-			INIT		= 8,
+			INIT		= 0,
 			AES_READ1	= 1,
 			AES_READ2	= 2,
 			AES_READ3	= 3,
