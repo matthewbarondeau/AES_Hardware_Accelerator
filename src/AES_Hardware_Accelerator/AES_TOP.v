@@ -52,8 +52,8 @@ module AES_TOP(
 	reg	[31:0]		aes_chunk_ctr_nxt;
 	
 	reg	[31:0]		aes_bram_addr_nxt;
-	reg	[3:0]		STATE;
-	reg	[3:0]		NXT_STATE;	
+	reg	[4:0]		STATE;
+	reg	[4:0]		NXT_STATE;	
 
 	reg	[31:0]	block_reg	[0:11];
 	//reg	[31:0]	key_reg		[0:7];
@@ -74,8 +74,10 @@ module AES_TOP(
 			AES_READ3	= 3,
 			START_AES	= 4,
 			WAIT_AES	= 5,
-			LOOP_AES	= 6,
-			HOLD		= 7;
+			START_AES2  = 6,
+			WAIT_AES2   = 7,
+			LOOP_AES	= 8,
+			HOLD		= 9;
 
 
 	// AES State Machine
@@ -140,9 +142,10 @@ module AES_TOP(
 			end else if((STATE == START_AES) && (aes_idle == 1'b1)) begin
 				if(next_chunk_pending == 1'b0) begin
 					first_chunk <= 1'b1;
+					//NXT_STATE   <= WAIT_AES;
 				end else if(next_chunk_pending == 1'b1)
 					first_chunk <= 1'b0;
-					next_chunk 	<= 1'b1;
+					//next_chunk 	<= 1'b1;
 					NXT_STATE	<= WAIT_AES;
 			end else if((STATE == START_AES) && (aes_idle == 1'b0)) begin
 				NXT_STATE <= START_AES;
@@ -151,13 +154,25 @@ module AES_TOP(
 			end else if((STATE == WAIT_AES) && (aes_idle == 1'b1)) begin
 				first_chunk 	<= 1'b0;
 				next_chunk		<= 1'b0;
-				aes_result_reg 	<= aes_result;
-				NXT_STATE <= LOOP_AES;
+				//aes_result_reg 	<= aes_result;
+				NXT_STATE <= START_AES2;
+			end else if((STATE == START_AES2) &&(aes_idle == 1'b1)) begin	
+				next_chunk <= 1'b1;
+				NXT_STATE <= WAIT_AES2;
+		    end else if((STATE == START_AES2) && (aes_idle == 1'b0)) begin
+		        NXT_STATE <= START_AES2;
+		    end else if((STATE == WAIT_AES2) && (aes_idle == 1'b0)) begin
+                NXT_STATE <= WAIT_AES2;
+		    end else if((STATE == WAIT_AES2) && (aes_idle == 1'b1)) begin
+		        next_chunk <= 1'b0;
+                NXT_STATE <= LOOP_AES;
+                aes_result_reg <= aes_result;
 			end else if((STATE == LOOP_AES) && (aes_chunk_ctr > 32'b1)) begin
 				first_chunk <= 1'b0;
 				next_chunk 	<= 1'b1;
 				aes_chunk_ctr	<= aes_chunk_ctr_nxt - 32'h1;
 				aes_bram_addr	<= aes_bram_addr_nxt + 32'h4;
+				next_chunk_pending <= 1'b1;
 				NXT_STATE 	<= AES_READ1;
 			end else if((STATE == LOOP_AES) && (aes_chunk_ctr == 32'b1)) begin
 				first_chunk 	<= 1'b0;
