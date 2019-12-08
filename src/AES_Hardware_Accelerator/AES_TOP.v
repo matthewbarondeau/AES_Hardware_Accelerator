@@ -44,7 +44,6 @@ module AES_TOP(
 	wire [127:0]	aes_result;
 	reg				first_chunk;
 	reg				next_chunk;
-	reg				next_chunk_pending;
 	reg				aes_data_valid;
 	reg				aes_core_rst_n;
 	
@@ -104,7 +103,6 @@ module AES_TOP(
 			
 			first_chunk			<= 1'b1;
 			next_chunk			<= 1'b0;
-			next_chunk_pending	<= 1'b0;
 			aes_chunk_ctr		<= 32'h0;
 			aes_bram_addr		<= 32'h0;
 			aes_data_valid		<= 1'h0;
@@ -140,17 +138,13 @@ module AES_TOP(
 				aes_start_read	<= 1'b1;
 				NXT_STATE	<= AES_READ1;
 			end else if((STATE == START_AES) && (aes_idle == 1'b1)) begin
-				if(next_chunk_pending == 1'b0) begin
-					first_chunk <= 1'b1;
-					//NXT_STATE   <= WAIT_AES;
-				end else if(next_chunk_pending == 1'b1)
-					first_chunk <= 1'b0;
-					//next_chunk 	<= 1'b1;
-					NXT_STATE	<= WAIT_AES;
+				first_chunk <= 1'b1;
+				NXT_STATE	<= WAIT_AES;
 			end else if((STATE == START_AES) && (aes_idle == 1'b0)) begin
 				NXT_STATE <= START_AES;
 			end else if((STATE == WAIT_AES) && (aes_idle == 1'b0)) begin
 				NXT_STATE <= WAIT_AES;
+				first_chunk <= 1'b0;
 			end else if((STATE == WAIT_AES) && (aes_idle == 1'b1)) begin
 				first_chunk 	<= 1'b0;
 				next_chunk		<= 1'b0;
@@ -163,23 +157,25 @@ module AES_TOP(
 		        NXT_STATE <= START_AES2;
 		    end else if((STATE == WAIT_AES2) && (aes_idle == 1'b0)) begin
                 NXT_STATE <= WAIT_AES2;
+				next_chunk <= 1'b0;
 		    end else if((STATE == WAIT_AES2) && (aes_idle == 1'b1)) begin
 		        next_chunk <= 1'b0;
-                NXT_STATE <= LOOP_AES;
+                NXT_STATE <= INIT;
+				aes_complete <= 1'b1;
                 aes_result_reg <= aes_result;
+			/*
 			end else if((STATE == LOOP_AES) && (aes_chunk_ctr > 32'b1)) begin
 				first_chunk <= 1'b0;
 				next_chunk 	<= 1'b1;
 				aes_chunk_ctr	<= aes_chunk_ctr_nxt - 32'h1;
 				aes_bram_addr	<= aes_bram_addr_nxt + 32'h4;
-				next_chunk_pending <= 1'b1;
 				NXT_STATE 	<= AES_READ1;
 			end else if((STATE == LOOP_AES) && (aes_chunk_ctr == 32'b1)) begin
 				first_chunk 	<= 1'b0;
 				next_chunk		<= 1'b0;
-				next_chunk_pending <= 1'b0;
 				aes_complete <= 1'b1;
 				NXT_STATE <= INIT;
+			*/
 			end
 		end
 	end
