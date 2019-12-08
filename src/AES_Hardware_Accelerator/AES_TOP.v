@@ -101,7 +101,7 @@ module AES_TOP(
 			block_reg[10]		<= 32'h0;
 			block_reg[11]		<= 32'h0;
 			
-			first_chunk			<= 1'b1;
+			first_chunk			<= 1'b0;
 			next_chunk			<= 1'b0;
 			aes_chunk_ctr		<= 32'h0;
 			aes_bram_addr		<= 32'h0;
