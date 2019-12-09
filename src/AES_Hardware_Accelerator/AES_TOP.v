@@ -37,7 +37,7 @@ module AES_TOP(
 	output wire [4:0]   aes_state,
 	input  wire [255:0] aes_key_input,
 	input  wire [127:0] aes_block_input
-    );
+  );
 
 
 // --------------------[  WIRES and REGISTERS  ]-----------------------------------
@@ -81,6 +81,7 @@ module AES_TOP(
 			START_AES2  = 6,
 			WAIT_AES2   = 7,
 			LOOP_AES	= 8,
+      WAIT_AES3 = 10,
 			HOLD		= 9;
 
 
@@ -153,34 +154,24 @@ module AES_TOP(
 			end else if((STATE == WAIT_AES) && (aes_idle == 1'b1)) begin
 				first_chunk 	<= 1'b0;
 				next_chunk		<= 1'b0;
-				//aes_result_reg 	<= aes_result;
 				NXT_STATE <= START_AES2;
-			end else if((STATE == START_AES2) &&(aes_idle == 1'b1)) begin	
+			end else if((STATE == START_AES2) && (aes_idle == 1'b1)) begin	
 				next_chunk <= 1'b1;
 				NXT_STATE <= WAIT_AES2;
-		    end else if((STATE == START_AES2) && (aes_idle == 1'b0)) begin
-		        NXT_STATE <= START_AES2;
-		    end else if((STATE == WAIT_AES2) && (aes_idle == 1'b0)) begin
-                NXT_STATE <= WAIT_AES2;
+		  end else if((STATE == START_AES2) && (aes_idle == 1'b0)) begin
+		    NXT_STATE <= START_AES2;
+		  end else if((STATE == WAIT_AES2) && (aes_idle == 1'b0)) begin
+        NXT_STATE <= WAIT_AES2;
 				next_chunk <= 1'b0;
-		    end else if((STATE == WAIT_AES2) && (aes_idle == 1'b1)) begin
-		        next_chunk <= 1'b0;
-                NXT_STATE <= INIT;
+		  end else if((STATE == WAIT_AES2) && (aes_idle == 1'b1)) begin
+        NXT_STATE <= WAIT_AES3;
+        next_chunk <= 1'b0;
+      end else if((STATE == WAIT_AES3) && (aes_idle == 1'b0)) begin
+        NXT_STATE <= WAIT_AES3;
+      end else if((STATE == WAIT_AES3) && (aes_idle == 1'b1)) begin
+        NXT_STATE <= INIT;
 				aes_complete <= 1'b1;
-                aes_result_reg <= aes_result;
-			/*
-			end else if((STATE == LOOP_AES) && (aes_chunk_ctr > 32'b1)) begin
-				first_chunk <= 1'b0;
-				next_chunk 	<= 1'b1;
-				aes_chunk_ctr	<= aes_chunk_ctr_nxt - 32'h1;
-				aes_bram_addr	<= aes_bram_addr_nxt + 32'h4;
-				NXT_STATE 	<= AES_READ1;
-			end else if((STATE == LOOP_AES) && (aes_chunk_ctr == 32'b1)) begin
-				first_chunk 	<= 1'b0;
-				next_chunk		<= 1'b0;
-				aes_complete <= 1'b1;
-				NXT_STATE <= INIT;
-			*/
+        aes_result_reg <= aes_result;
 			end
 		end
 	end
