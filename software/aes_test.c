@@ -43,6 +43,7 @@
 #include <linux/fs.h>
 #include <assert.h>
 #include <endian.h>
+#include <openssl/aes.h>
 
 // ******************************************************************** 
 //                              DEFINES
@@ -54,7 +55,7 @@
 #undef DEBUG1
 #undef DEBUG2
 #undef DEBUG_BRAM
-#define DEBUG                    // Comment out to turn off debug messages
+/* #define DEBUG                    // Comment out to turn off debug messages */
 /* #define DEBUG1                   // Comment out to turn off debug messages */
 //#define DEBUG2
 //#define DEBUG_BRAM
@@ -94,24 +95,38 @@
 #define START_ADDR          0x18
 #define FIRST_REG           0x00
 
-        // ******************************************************************** 
-        // One-bit masks for bits 0-31
+// ******************************************************************** 
+// One-bit masks for bits 0-31
 
 #define ONE_BIT_MASK(_bit)    (0x00000001 << (_bit))
 
-        // ******************************************************************** 
+// ******************************************************************** 
 
 #define MAP_SIZE 4096UL
 #define MAP_MASK (MAP_SIZE - 1)
 
-        // ******************************************************************** 
-        // Device path name for the GPIO device
+// ******************************************************************** 
+// Device path name for the GPIO device
 
 #define GPIO_TIMER_EN_NUM   0x7             // Set bit 7 to enable timere             
 #define GPIO_TIMER_CR       0x43C00000      // Control register
 #define GPIO_LED_NUM        0x7
 #define GPIO_LED            0x43C00004      // LED register
 #define GPIO_TIMER_VALUE    0x43C0000C      // Timer value
+
+// *********************************************************************
+// const for keys/value for testbench values 
+static const unsigned char key[] = {
+        0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe,
+        0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81,
+        0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7,
+        0x2d, 0x98, 0x10, 0xa3, 0x09, 0x14, 0xdf, 0xf4
+};
+
+unsigned char text_openssl[] = {
+        0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96,
+        0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17, 0x2a
+};
 
 // *********************************************************************
 //  Time stamp set in the last sigio_signal_handler() invocation:
@@ -228,6 +243,22 @@ printf("DEBUG: Number of ones: %ld\n", intr_latency_measurements[index]);
 	*std_deviation_p = int_sqrt(sum/lp_cnt);
 }
 
+// *************************  print_aes ******************************
+// Puts hex from encrypt array into aes as a string for printing
+// Assumes that aes is 33 bytes (32 bytes for each hex + null)
+//
+void print_aes(char *aes, uint32_t *encrypt, int endian_switch) {
+        char tstr[20];
+        for(int index = 0; index < 4; index++) {
+                if(endian_switch)
+                        sprintf(tstr, "%.8x", be32toh(encrypt[index]));
+                else
+                        sprintf(tstr, "%.8x", encrypt[index]);
+                strcat(aes, tstr);
+        }
+        /* aes[32] = '\0'; */
+}
+
 // ***********************************************************************
 //                              MAIN 
 // ***********************************************************************
@@ -243,7 +274,7 @@ int main(int argc, char * argv[])   {
     FILE* input_file;
     int mode;
     
-    if (argc < 4) {
+    if (argc < 4 && (strcmp(argv[1], "-tb") != 0)) {
 		printf("Wrong number of args for program \n");
 		return -1;
 	}
@@ -355,6 +386,17 @@ int main(int argc, char * argv[])   {
     #ifdef DEBUG1        
         printf("BRAM_virtual_address = 0x%.8x\n", BRAM_virtual_address); 
     #endif                                    
+        
+// *************************************************************************
+// Set up the virtual address for the accelerator
+//
+ 
+    uint32_t* acc_virtual_addr = mmap(NULL,
+                                 4096,
+                                 PROT_READ | PROT_WRITE, 
+                                 MAP_SHARED, 
+                                 dh, 
+                                 ACC); 
     
     
 // *************************************************************************
@@ -440,21 +482,43 @@ int main(int argc, char * argv[])   {
         }
 
     } else if (mode == TESTBENCH) {
-        // key
-        ocm[0] = 0x603deb10;
-        ocm[1] = 0x15ca71be;
-        ocm[2] = 0x2b73aef0;
-        ocm[3] = 0x857d7781;
-        ocm[4] = 0x1f352c07;
-        ocm[5] = 0x3b6108d7;
-        ocm[6] = 0x2d9810a3;
-        ocm[7] = 0x0914dff4;
+        /* // key */
+        /* ocm[0] = 0x603deb10; */
+        /* ocm[1] = 0x15ca71be; */
+        /* ocm[2] = 0x2b73aef0; */
+        /* ocm[3] = 0x857d7781; */
+        /* ocm[4] = 0x1f352c07; */
+        /* ocm[5] = 0x3b6108d7; */
+        /* ocm[6] = 0x2d9810a3; */
+        /* ocm[7] = 0x0914dff4; */
+
+        /* // chunk */
+        /* ocm[8] = 0x6bc1bee2; */
+        /* ocm[9] = 0x2e409f96; */
+        /* ocm[10] = 0xe93d7e11; */
+        /* ocm[11] = 0x7393172a; */
+
+        #ifdef DEBUG
+            printf("Testbench mode\n");
+        #endif
+        // Key
+        /* memcpy(&(acc_virtual_addr[13]), key, sizeof(key)); */
+        acc_virtual_addr[13] = 0x603deb10;
+        acc_virtual_addr[14] = 0x15ca71be;
+        acc_virtual_addr[15] = 0x2b73aef0;
+        acc_virtual_addr[16] = 0x857d7781;
+        acc_virtual_addr[17] = 0x1f352c07;
+        acc_virtual_addr[18] = 0x3b6108d7;
+        acc_virtual_addr[19] = 0x2d9810a3;
+        acc_virtual_addr[20] = 0x0914dff4;
 
         // chunk
-        ocm[8] = 0x6bc1bee2;
-        ocm[9] = 0x2e409f96;
-        ocm[10] = 0xe93d7e11;
-        ocm[11] = 0x7393172a;
+        /* memcpy(&(acc_virtual_addr[21]), text_openssl, sizeof(text_openssl)); */
+        acc_virtual_addr[21] = 0x6bc1bee2;
+        acc_virtual_addr[22] = 0x2e409f96;
+        acc_virtual_addr[23] = 0xe93d7e11;
+        acc_virtual_addr[24] = 0x7393172a;
+
     } else {
             printf("Idk how you got here\n");
             return -1;
@@ -471,25 +535,17 @@ int main(int argc, char * argv[])   {
     int                 wpid;
     unsigned int        timer_value;
 
-// *************************************************************************
-// Set up the virtual address for the accelerator
-//
- 
-    uint32_t* acc_virtual_addr = mmap(NULL,
-                                 4096,
-                                 PROT_READ | PROT_WRITE, 
-                                 MAP_SHARED, 
-                                 dh, 
-                                 ACC); 
-   
+  
 // ****************************************************************************
 // The main meat
 //
         smb(GPIO_LED, GPIO_LED_NUM, 0x0); 
         smb(GPIO_LED, 0x5, 0x0);            // Clear error indicator
 
-        
-        printf("Fork\n");
+        #ifdef DEBUG 
+                printf("Fork\n");
+        #endif
+
         // ********************************************************************
         // Fork off a child process to start the DMA process
         // 
@@ -505,7 +561,9 @@ int main(int argc, char * argv[])   {
             if (childpid == 0)
             {
                 // Transfer Data into BRAM form CDMA
-                printf("Starting cdma transfer\n");
+                #ifdef DEBUG
+                        printf("Starting cdma transfer\n");
+                #endif
 
                 /* int transfer_size = chunks*64; //64 bytes per chunk */
                 int transfer_size = 96; //key + 1 chunk
@@ -514,7 +572,9 @@ int main(int argc, char * argv[])   {
                 address_set(cdma_virtual_address, BTT, transfer_size); // Start transfer
                 cdma_sync(cdma_virtual_address);
                 
-                printf("CDMA done, starting accelerator now\n");
+                #ifdef DEBUG
+                        printf("CDMA done, starting accelerator now\n");
+                #endif
 
                 // setup sha, one for now
                 if(chunks > 1)
@@ -528,7 +588,9 @@ int main(int argc, char * argv[])   {
                 address_set(acc_virtual_addr, FIRST_REG, 0x3);  // Enable aes conversion
                 address_set(acc_virtual_addr, FIRST_REG, 0x2);  // Turn off start
                 
-                printf("Exiting child process\n");
+                #ifdef DEBUG
+                        printf("Exiting child process\n");
+                #endif
 
                 exit(0);  // Exit the child process
             }
@@ -543,9 +605,6 @@ int main(int argc, char * argv[])   {
                 // Wait for child process to terminate before checking for interrupt 
                 // 
                                 
-                //waitpid(childpid, &status, WCONTINUED);
-
-                //if (!det_int) continue;       // Go back to top of while loop.
                 while (!det_int);
                 
                 
@@ -554,60 +613,40 @@ int main(int argc, char * argv[])   {
                 smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x0);     // Disable timer
                 smb(GPIO_LED, GPIO_LED_NUM, 0x0);               // Turn off the LED
                 
-        
-                // get sha
-                // digest starts in reg8
-                char digest[80];
-                for(int index = 0; index < 4; index++) {
-                        uint32_t temp = acc_virtual_addr[8+index];
-                        // print to screen
-                        /* printf("%.2x",(char)((temp&0xFF000000)>>24)); */
-                        /* printf("%.2x",(char)((temp&0x00FF0000)>>16)); */
-                        /* printf("%.2x",(char)((temp&0x0000FF00)>>8)); */
-                        /* printf("%.2x",(char)((temp&0x000000FF))); */
-                        // print to screen
-                        char tstr[4];
-                        /* sprintf(tstr, "%.2x",(char)((temp&0x000000FF))); */
-                        /* strcat(digest, tstr); */
-                        /* sprintf(tstr, "%.2x",(char)((temp&0x0000FF00)>>8)); */
-                        /* strcat(digest, tstr); */
-                        /* sprintf(tstr, "%.2x",(char)((temp&0x00FF0000)>>16)); */
-                        /* strcat(digest, tstr); */
-                        /* sprintf(tstr, "%.2x",(char)((temp&0xFF000000)>>24)); */
-                        /* strcat(digest, tstr); */
-
-                        sprintf(tstr, "%.2x",(char)((temp&0xFF000000)>>24));
-                        strcat(digest, tstr);
-                        sprintf(tstr, "%.2x",(char)((temp&0x00FF0000)>>16));
-                        strcat(digest, tstr);
-                        sprintf(tstr, "%.2x",(char)((temp&0x0000FF00)>>8));
-                        strcat(digest, tstr);
-                        sprintf(tstr, "%.2x",(char)((temp&0x000000FF)));
-                        strcat(digest, tstr);
-
-                }
-                /* printf("\n"); */
-                printf("HW AES is:%s\n", digest);
-
-                /* printf("Doing SHA256 in SW\n"); */
+                // Print value of ecb mode aes from hw
+                char aes[80] = {0};
+                print_aes(aes, &(acc_virtual_addr[8]), 0);
+                printf("HW AES is: %s\n", aes);
                 
+                // Calculate in sw and see time
                 int diff = 1;
-                if(mode == FILE_MODE) {
-                        char command[80];
-                        strcpy(command, "sha256sum ");
-                        strcat(command, aes_string);
+                if(mode == TESTBENCH) {
+                        // time setup
                         struct timeval first, last;
                         gettimeofday(&first, 0);
-                        FILE* pipe = popen(command, "r");
-                        char buffer[100];
-                        fscanf(pipe, "%100s", buffer);
-                        pclose(pipe);
+
+                        // Encrypt in software
+                        char enc_out[80];
+                        AES_KEY enc_key;
+                        AES_set_encrypt_key(key, 256, &enc_key);
+                        AES_ecb_encrypt(text_openssl, enc_out, &enc_key, 1);
+
+                        // time again
                         gettimeofday(&last, 0);
                         diff = (last.tv_sec - first.tv_sec) * 100000 +
                                 (last.tv_usec - first.tv_usec);
                         diff *= 1000; //convert to ns
-                        printf("SW sha256 is:%s\n", buffer);
-                        int compare = strcmp(digest, buffer);
+
+                        // print
+                        char sw_aes[80] = {0};
+                        print_aes(sw_aes, (uint32_t*)enc_out, 1);
+                        printf("SW aes is: %s\n", sw_aes);
+                        int compare = strcmp(aes, sw_aes);
+                        if(compare != 0) {
+                                printf("SW and HW values not the same!!!\n");
+                        } else {
+                                printf("SW and HW AES values the same :)\n");
+                        }
                         printf("Time SW = %d ns\n", diff);
                 }
 
