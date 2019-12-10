@@ -26,8 +26,11 @@ PWD   := $(shell pwd)
 # source and compile only the modules in the PWD (local) directory.
 
 default:
-#	$(MAKE) -C $(KDIR) M=$(PWD) modules
-	$(CC)  aes_test.c -o aes_test -lcrypto
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
+#	$(CC)  aes_test.c -o aes_test
+#	$(CC)  no_int_sha.c -o no_int_sha
+#	$(CC)  test_interrupt.c -o test_interrupt
+#	$(CC)  intr_latency_csv.c -o intr_latency_csv
 
 clean::
 	$(RM) .skeleton* *.cmd *.o *.ko *.mod.c *.exe test_dma
