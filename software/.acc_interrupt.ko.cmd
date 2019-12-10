@@ -1,1 +1,0 @@
-cmd_/home/team6/AES_Hardware_Accelerator/software/acc_interrupt.ko := ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/team6/AES_Hardware_Accelerator/software/acc_interrupt.ko /home/team6/AES_Hardware_Accelerator/software/acc_interrupt.o /home/team6/AES_Hardware_Accelerator/software/acc_interrupt.mod.o ;  true
