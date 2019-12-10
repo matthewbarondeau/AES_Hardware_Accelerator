@@ -45,6 +45,9 @@
 #include <endian.h>
 #include <openssl/aes.h>
 
+// Local includes
+#include "acc_helper.h"
+
 // ******************************************************************** 
 //                              DEFINES
 // ******************************************************************** 
@@ -55,7 +58,7 @@
 #undef DEBUG1
 #undef DEBUG2
 #undef DEBUG_BRAM
-/* #define DEBUG                    // Comment out to turn off debug messages */
+#define DEBUG                    // Comment out to turn off debug messages
 /* #define DEBUG1                   // Comment out to turn off debug messages */
 //#define DEBUG2
 //#define DEBUG_BRAM
@@ -95,15 +98,15 @@
 #define START_ADDR          0x18
 #define FIRST_REG           0x00
 
-// ******************************************************************** 
-// One-bit masks for bits 0-31
+/* // ******************************************************************** */ 
+/* // One-bit masks for bits 0-31 */
 
-#define ONE_BIT_MASK(_bit)    (0x00000001 << (_bit))
+/* #define ONE_BIT_MASK(_bit)    (0x00000001 << (_bit)) */
 
-// ******************************************************************** 
+/* // ******************************************************************** */ 
 
-#define MAP_SIZE 4096UL
-#define MAP_MASK (MAP_SIZE - 1)
+/* #define MAP_SIZE 4096UL */
+/* #define MAP_MASK (MAP_SIZE - 1) */
 
 // ******************************************************************** 
 // Device path name for the GPIO device
@@ -139,19 +142,19 @@ struct timeval sigio_signal_timestamp;
 unsigned long intr_latency_measurements[3000];
 
 
-// ************************  FUNCTION PROTOTYPES ***********************
-//       
+/* // ************************  FUNCTION PROTOTYPES *********************** */
+/* // */       
 
-int smb(unsigned int target_addr, unsigned int pin_number, unsigned int bit_val);
-int pm( unsigned int target_addr, unsigned int value );
-unsigned int rm( unsigned int target_addr);
+/* int smb(unsigned int target_addr, unsigned int pin_number, unsigned int bit_val); */
+/* int pm( unsigned int target_addr, unsigned int value ); */
+/* unsigned int rm( unsigned int target_addr); */
 
-unsigned long int_sqrt(unsigned long n);
+/* unsigned long int_sqrt(unsigned long n); */
 
-void compute_interrupt_latency_stats( unsigned long   *min_latency_p, 
-                                      unsigned long   *max_latency_p, 
-                                      unsigned long   *average_latency_p, 
-                                      unsigned long   *std_deviation_p); 
+/* void compute_interrupt_latency_stats( unsigned long   *min_latency_p, */ 
+/*                                       unsigned long   *max_latency_p, */ 
+/*                                       unsigned long   *average_latency_p, */ 
+/*                                       unsigned long   *std_deviation_p); */ 
 
 
 // *************************  ADDRESS_SET ************************************   
@@ -492,11 +495,11 @@ int main(int argc, char * argv[])   {
         /* ocm[6] = 0x2d9810a3; */
         /* ocm[7] = 0x0914dff4; */
 
-        /* // chunk */
-        /* ocm[8] = 0x6bc1bee2; */
-        /* ocm[9] = 0x2e409f96; */
-        /* ocm[10] = 0xe93d7e11; */
-        /* ocm[11] = 0x7393172a; */
+        // chunk
+        ocm[0] = 0x6bc1bee2;
+        ocm[1] = 0x2e409f96;
+        ocm[2] = 0xe93d7e11;
+        ocm[3] = 0x7393172a;
 
         #ifdef DEBUG
             printf("Testbench mode\n");
@@ -511,13 +514,19 @@ int main(int argc, char * argv[])   {
         acc_virtual_addr[18] = 0x3b6108d7;
         acc_virtual_addr[19] = 0x2d9810a3;
         acc_virtual_addr[20] = 0x0914dff4;
+        
+        //21-28 used for key2
+
+        // write address for bram
+        // 1 chunk for now, so 16
+        acc_virtual_addr[29] = 16;
 
         // chunk
         /* memcpy(&(acc_virtual_addr[21]), text_openssl, sizeof(text_openssl)); */
-        acc_virtual_addr[21] = 0x6bc1bee2;
-        acc_virtual_addr[22] = 0x2e409f96;
-        acc_virtual_addr[23] = 0xe93d7e11;
-        acc_virtual_addr[24] = 0x7393172a;
+        /* acc_virtual_addr[21] = 0x6bc1bee2; */
+        /* acc_virtual_addr[22] = 0x2e409f96; */
+        /* acc_virtual_addr[23] = 0xe93d7e11; */
+        /* acc_virtual_addr[24] = 0x7393172a; */
 
     } else {
             printf("Idk how you got here\n");
@@ -566,7 +575,7 @@ int main(int argc, char * argv[])   {
                 #endif
 
                 /* int transfer_size = chunks*64; //64 bytes per chunk */
-                int transfer_size = 96; //key + 1 chunk
+                int transfer_size = 16; //1 chunk = 128 bits = 16 bytes
                 address_set(cdma_virtual_address, DA, BRAM1);       // Write destination address
                 address_set(cdma_virtual_address, SA, OCM);         // Write source address
                 address_set(cdma_virtual_address, BTT, transfer_size); // Start transfer
@@ -612,10 +621,24 @@ int main(int argc, char * argv[])   {
                 timer_value = rm(GPIO_TIMER_VALUE);             // Read the timer value
                 smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x0);     // Disable timer
                 smb(GPIO_LED, GPIO_LED_NUM, 0x0);               // Turn off the LED
+
+                // do cmda read back
+                int transfer_size = 16; //1 chunk = 128 bits = 16 bytes
+                address_set(cdma_virtual_address, DA, (OCM + transfer_size));       // Write destination address
+                address_set(cdma_virtual_address, SA, (BRAM1 + transfer_size));         // Write source address
+                address_set(cdma_virtual_address, BTT, transfer_size); // Start transfer
+                cdma_sync(cdma_virtual_address);
+                
+                /* #ifdef DEBUG */
+                        printf("CDMA write back done, printing\n");
+                /* #endif */
+
+
                 
                 // Print value of ecb mode aes from hw
                 char aes[80] = {0};
-                print_aes(aes, &(acc_virtual_addr[8]), 0);
+                /* print_aes(aes, &(acc_virtual_addr[8]), 0); */
+                print_aes(aes, (&ocm[4]), 0);
                 printf("HW AES is: %s\n", aes);
                 
                 // Calculate in sw and see time
@@ -753,143 +776,4 @@ EXIT:
     
 }   // END OF main
 
-
-// ***********************  SET MEMORY BIT (SMB) ROUTINE  *****************************
-// 
-
-int smb(unsigned int target_addr, unsigned int pin_number, unsigned int bit_val)
-{
-    unsigned int reg_data;
-
-    int fd = open("/dev/mem", O_RDWR|O_SYNC);
-    
-    if(fd == -1)
-    {
-        printf("Unable to open /dev/mem. Ensure it exists (major=1, minor=1)\n");
-        return -1;
-    }    
-
-    volatile unsigned int *regs, *address ;
-    
-    regs = (unsigned int *)mmap(NULL, 
-                                MAP_SIZE, 
-                                PROT_READ|PROT_WRITE, 
-                                MAP_SHARED, 
-                                fd, 
-                                target_addr & ~MAP_MASK);
-    
-    address = regs + (((target_addr) & MAP_MASK)>>2);
-
-#ifdef DEBUG1
-    printf("REGS           = 0x%.8x\n", regs);    
-    printf("Target Address = 0x%.8x\n", target_addr);
-    printf("Address        = 0x%.8x\n", address);       // display address value      
-#endif 
-   
-    /* Read register value to modify */
-    
-    reg_data = *address;
-    
-    if (bit_val == 0) {
-        
-        // Deassert output pin in the target port's DR register
-        
-        reg_data &= ~ONE_BIT_MASK(pin_number);
-        *address = reg_data;
-    } else {
-        
-        // Assert output pin in the target port's DR register
-                
-        reg_data |= ONE_BIT_MASK(pin_number);
-        *address = reg_data;
-    }
-    
-    int temp = close(fd);
-    if(temp == -1)
-    {
-        printf("Unable to close /dev/mem.  Ensure it exists (major=1, minor=1)\n");
-        return -1;
-    }    
-
-    munmap(NULL, MAP_SIZE);        
-    return 0;
-   
-}    // End of smb routine
-
-
-// ************************ READ MEMORY (RM) ROUTINE **************************
-//
-unsigned int rm( unsigned int target_addr) 
-{
-	int fd = open("/dev/mem", O_RDWR|O_SYNC);
-	volatile unsigned int *regs, *address ;
-	
-	if(fd == -1)
-	{
-		perror("Unable to open /dev/mem.  Ensure it exists (major=1, minor=1)\n");
-		return -1;
-	}	
-		
-	regs = (unsigned int *)mmap(NULL, 
-	                            MAP_SIZE, 
-	                            PROT_READ|PROT_WRITE, 
-	                            MAP_SHARED, 
-	                            fd, 
-	                            target_addr & ~MAP_MASK);		
-
-    address = regs + (((target_addr) & MAP_MASK)>>2);    	
-    //printf("Timer register = 0x%.8x\n", *address);
-    
-	unsigned int rxdata = *address;         // Perform read of SPI 
-            	
-	int temp = close(fd);                   // Close memory
-	if(temp == -1)
-	{
-		perror("Unable to close /dev/mem.  Ensure it exists (major=1, minor=1)\n");
-		return -1;
-	}	
-
-	munmap(NULL, MAP_SIZE);                 // Unmap memory
-	return rxdata;                          // Return data from read
-
-}   // End of em routine
-
-
-
-// ************************ PUT MEMORY (PM) ROUTINE **************************
-//
-
-int pm( unsigned int target_addr, unsigned int value ) 
-{
-	int fd = open("/dev/mem", O_RDWR|O_SYNC);
-	volatile unsigned int *regs, *address ;
-	
-	if(fd == -1)
-	{
-		perror("Unable to open /dev/mem.  Ensure it exists (major=1, minor=1)\n");		
-		return -1;
-	}	
-		
-	regs = (unsigned int *)mmap(NULL, 
-	                            MAP_SIZE, 
-	                            PROT_READ|PROT_WRITE, 
-	                            MAP_SHARED, 
-	                            fd, 
-	                            target_addr & ~MAP_MASK);		
-
-    address = regs + (((target_addr) & MAP_MASK)>>2);    	
-
-	*address = value; 	                    // Perform write command
-        	
-	int temp = close(fd);                   // Close memory
-	if(temp == -1)
-	{
-		perror("Unable to close /dev/mem.  Ensure it exists (major=1, minor=1)\n");
-		return -1;
-	}	
-
-	munmap(NULL, MAP_SIZE);                 // Unmap memory
-	return 0;                               // Return status
-
-}   // End of pm routine
 

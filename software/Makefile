@@ -27,7 +27,7 @@ PWD   := $(shell pwd)
 
 default:
 #	$(MAKE) -C $(KDIR) M=$(PWD) modules
-	$(CC)  aes_test.c -o aes_test -lcrypto
+	$(CC)  aes_test.c -o aes_test acc_helper.c -I. -lcrypto
 
 clean::
 	$(RM) .skeleton* *.cmd *.o *.ko *.mod.c *.exe test_dma
