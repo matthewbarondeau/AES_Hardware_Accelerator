@@ -24,13 +24,28 @@ slv_reg8[31:0] = aes_digest_reg[127:96]
 slv_reg9[31:0] = aes_digest_reg[95:64]  
 slv_regA[31:0] = aes_digest_reg[63:32]  
 slv_regB[31:0] = aes_digest_reg[31:0]  
+slv_regC[31:0]= 32'hbeefface;
+slv_regD[31:0]= aes_key_core1[255:224];
+slv_regE[31:0]= aes_key_core1[223:192];
+slv_regF[31:0]= aes_key_core1[191:160];
+slv_reg10[31:0]= aes_key_core1[159:128];
+slv_reg11[31:0]= aes_key_core1[127:96];
+slv_reg12[31:0]= aes_key_core1[95:64];
+slv_reg13[31:0]= aes_key_core1[63:32];
+slv_reg14[31:0]= aes_key_core1[31:0];
+slv_reg15[31:0]= aes_key_core2[255:224];
+slv_reg16[31:0]= aes_key_core2[223:192];
+slv_reg17[31:0]= aes_key_core2[191:160];
+slv_reg18[31:0]= aes_key_core2[159:128];
+slv_reg19[31:0]= aes_key_core2[127:96];
+slv_reg1A[31:0]= aes_key_core2[95:64];
+slv_reg1B[31:0]= aes_key_core2[63:32];
+slv_reg1C[31:0]= aes_key_core2[31:0];
+slv_reg1D[31:0]= aes_bram_write_addr_start;
 ```
 
-### BRAM order
+### Key order
 ```
-key   = {block_reg[0], block_reg[1], block_reg[2], block_reg[3],  
-         block_reg[4], block_reg[5], block_reg[6], block_reg[7]};  
-
-chunk = {block_reg[8], block_reg[9],  
-         block_reg[10], block_reg[11]};
+key   = {slv_reg13, slv_reg14, slv_reg15, slv_reg16,  
+         slv_reg18, slv_reg18, slv_reg19, slv_reg20};  
 ```
