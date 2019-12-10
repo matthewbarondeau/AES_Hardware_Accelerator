@@ -95,8 +95,9 @@
 	reg		axi_start_write;
 	wire	[31:0]	axi_bram_read_data;
 	wire		aes_start_read;
-	wire	[31:0]	aes_bram_read;
 	wire	[31:0]	aes_bram_read_data;
+  wire    aes_start_write;
+  wire  [31:0]  aes_bram_write_data;
 	reg		axi_start_sha;
 	reg		aes_clear_reg_n;
 
@@ -113,6 +114,7 @@
 	wire		aes_digest_valid;
 	wire		aes_complete;
 	wire   [31:0]  aes_bram_addr;
+  wire   [31:0]  aes_bram_write_addr;
 	wire   [255:0] aes_key_core1;
   wire   [255:0] aes_key_core2;
 
@@ -182,7 +184,7 @@
     wire [31:0]     axi_bram_write_data = slv_reg4;
     wire [31:0]     aes_num_chunks      = slv_reg5; // Number of chunks
     wire [31:0]     aes_bram_addr_start = slv_reg6; // Starting address in BRAM
-
+    wire [31:0]     aes_bram_write_addr_start = slv_reg29;
 
 	// I/O Connections assignments
 
@@ -721,7 +723,7 @@
 	        5'h1A   : reg_data_out <= aes_key_core2[95:64];
 	        5'h1B   : reg_data_out <= aes_key_core2[63:32];
 	        5'h1C   : reg_data_out <= aes_key_core2[31:0];
-	        5'h1D   : reg_data_out <= slv_reg29;
+	        5'h1D   : reg_data_out <= aes_bram_write_addr_start;
 	        5'h1E   : reg_data_out <= slv_reg30;
 	        5'h1F   : reg_data_out <= slv_reg31;
 	        default : reg_data_out <= 0;
@@ -812,13 +814,17 @@
         .bram_complete(bram_complete),
         .aes_num_chunks(aes_num_chunks),
         .aes_bram_addr_start(aes_bram_addr_start),
+        .aes_bram_write_addr_start(aes_bram_write_addr_start),
         .aes_result_reg(aes_digest_reg),
         .aes_complete(aes_complete),
         .aes_digest_valid(aes_digest_valid),
         
         .aes_start_read(aes_start_read),
         .aes_bram_addr(aes_bram_addr),
-        .aes_bram_read_data(aes_bram_read_data),        
+        .aes_bram_read_data(aes_bram_read_data),
+        .aes_bram_write_addr(aes_bram_write_addr),
+        .aes_start_write(aes_start_write),
+        .aes_bram_write_data(aes_bram_write_data),
         
         .aes_key_input1(aes_key_core1),
         .aes_key_input2(aes_key_core2)
@@ -846,6 +852,8 @@
         .sha_bram_read_data(aes_bram_read_data),
         .sha_start_read(aes_start_read),
         .bram_complete(bram_complete),
+        .sha_bram_write_data(aes_bram_write_data),
+        .sha_start_write(aes_start_write),
         
         // BRAM I/F
         .addr_BRAM(addr_BRAM),

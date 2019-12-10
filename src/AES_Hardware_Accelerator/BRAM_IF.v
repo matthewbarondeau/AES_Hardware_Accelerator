@@ -40,7 +40,9 @@ module BRAM_IF(
     input   wire [31:0]     sha_bram_addr,          // BRAM Address from the SHA unit
     output  reg  [31:0]     sha_bram_read_data,     // BRAM read data to the SHA unit   
     input   wire            sha_start_read,         // Start SHA read transaction
-        
+    input   wire [31:0]     sha_bram_write_data,
+    input   wire            sha_start_write,
+    
     output  reg             bram_complete,          // BRAM transaction completed
     
  // BRAM I/F 
@@ -66,8 +68,10 @@ module BRAM_IF(
             HOLD        = 7,
             SHA_READ1   = 8,
             SHA_READ2   = 9,
-            SHA_READ3   = 10;       // Not used yet
-          
+            SHA_READ3   = 10,       // Not used yet
+            SHA_WRITE1  = 11,
+            SHA_WRITE2  = 12,
+            SHA_WRITE3  = 13;
     
     // ---------- ASSIGNMENTS ------------------------------------
     
@@ -136,11 +140,22 @@ module BRAM_IF(
                 dout_BRAM           <= axi_bram_write_data;      // Assert write Data          
                 NXT_STATE           <= WRITE1;                   // Next State = Write    
             end  
+            
+            else if ((STATE == IDLE) &&
+                     (sha_start_write == 1'b1))
+            begin
+                we_BRAM             <= 4'b0000;
+                en_BRAM             <= 1'b0;
+                addr_BRAM           <= sha_bram_addr[31:0];      // Assert address
+                dout_BRAM           <= sha_bram_write_data;      // Assert write Data          
+                NXT_STATE           <= SHA_WRITE1;               // Next State = Write    
+            end
 
             else if ((STATE == IDLE) && 
                      (~axi_start_write== 1'b1) && 
                      (~axi_start_read == 1'b1) &&
-                     (~sha_start_read == 1'b1)) 
+                     (~sha_start_read == 1'b1) &&
+                     (~sha_start_write== 1'b1))
             begin        
                 NXT_STATE           <= IDLE;                    // Stay in IDLE state
             end
@@ -234,15 +249,50 @@ module BRAM_IF(
                 //sha_bram_read_data  <= 32'hDEADDEAD;            // Read data from BRAM
                 bram_complete       <= 1'b1;
                 NXT_STATE           <= HOLD;                    // Go to HOLD and then back to IDLE
-end       
+            end       
 
-                                              
+    // ------------   SHA_WRITE1 STATE  ---------------------------------------------- 
+    //                   
+            else if (STATE == SHA_WRITE1) 
+            begin 
+                en_BRAM             <= 1'b1;                    // Assert enable
+                we_BRAM             <= 4'b0000;                 // Assert Write Enable           
+                dout_BRAM           <= sha_bram_write_data;     // Assert Write Data
+                addr_BRAM           <= sha_bram_addr[31:0];     // Assert address;                
+                NXT_STATE           <= SHA_WRITE2;               
+            end
+
+    // ------------   SHA_WRITE2 STATE  -----------------------------------------------  
+    //         
+            else if(STATE == SHA_WRITE2)   
+            begin      
+                en_BRAM             <= 1'b1;
+                we_BRAM             <= 4'b1111;
+                dout_BRAM           <= sha_bram_write_data;     // Assert Write Data
+                bram_write_data     <= sha_bram_write_data;     // DEBUG
+                addr_BRAM           <= sha_bram_addr[31:0];     // Assert address; 
+                NXT_STATE           <= SHA_WRITE3;                  
+            end
+                    
+    // ------------   SHA_WRITE3 STATE  -----------------------------------------------  
+    //         
+            else if(STATE == SHA_WRITE3)   
+            begin      
+                en_BRAM             <= 1'b0;
+                we_BRAM             <= 4'b1111;
+                dout_BRAM           <= sha_bram_write_data;     // Assert Write Data
+                addr_BRAM           <= sha_bram_addr[31:0];     // Assert address; 
+                NXT_STATE           <= SHA_READ1;                   // Go to READ1 state to read written
+            end
+
+                              
     //------------    HOLD STATE   -------------------------------------------------
     //
             else if((STATE == HOLD) &&              
                    ((axi_start_read  == 1'b1) ||
                     (axi_start_write == 1'b1) ||
-                    (sha_start_read  == 1'b1)))            
+                    (sha_start_read  == 1'b1) ||
+                    (sha_start_write == 1'b1)))            
             begin
                 we_BRAM             <=  4'b0;
                 en_BRAM             <=  1'b0;
@@ -254,6 +304,7 @@ end
             else if((STATE == HOLD) &&              
                    ((axi_start_read  == 1'b0) &&
                     (axi_start_write == 1'b0) &&
+                    (sha_start_write == 1'b0) &&
                     (sha_start_read  == 1'b0)))            
             begin
                 we_BRAM             <=  4'b0;
