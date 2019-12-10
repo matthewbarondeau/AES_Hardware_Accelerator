@@ -101,6 +101,7 @@ module AES_TOP(
 			first_chunk			<= 1'b0;
 			next_chunk			<= 1'b0;
 			aes_bram_addr		<= 32'h0;
+			aes_bram_write_addr <= 32'h0;
 			aes_data_valid  <= 1'h0;
 			reg_num_nxt			<= 4'h0;
 			aes_start_read	<= 1'b0;
@@ -109,6 +110,7 @@ module AES_TOP(
 		end else if(aes_rst_n == 1'b1) begin
 			if((STATE == INIT) && (axi_start_aes == 1'b1)) begin
 				aes_bram_addr 	<= aes_bram_addr_start;
+				aes_bram_write_addr <= aes_bram_write_addr_start;
 				aes_complete  	<= 1'b0;
 				NXT_STATE		<= AES_READ1;
 			end else if((STATE == INIT) && (axi_start_aes == 1'b0)) begin
@@ -186,6 +188,7 @@ module AES_TOP(
 			reg_num <= 4'b0;
       write_reg_num <= 4'b0;
 			aes_bram_addr_nxt <= aes_bram_addr;
+			aes_bram_write_addr_nxt <= aes_bram_write_addr;
 			STATE <= INIT;
 		end else if(aes_rst_n == 1'b1) begin
 			reg_num 	<= reg_num_nxt;
