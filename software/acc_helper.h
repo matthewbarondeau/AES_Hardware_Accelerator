@@ -12,10 +12,10 @@
 #undef DEBUG1
 #undef DEBUG2
 #undef DEBUG_BRAM
-#define DEBUG                    // Comment out to turn off debug messages
-/* #define DEBUG1                // Comment out to turn off debug messages */
-//#define DEBUG2
-//#define DEBUG_BRAM
+#define DEBUG            // Comment out to turn off debug messages
+/* #define DEBUG1           // Comment out to turn off debug messages */
+/* #define DEBUG2 */
+/* #define DEBUG_BRAM */
 
 // ******************************************************************** 
 // Memomoy Map
@@ -27,9 +27,9 @@
 
 // ******************************************************************** 
 // Modes
-#define STRING 		    1
-#define FILE_MODE	    2
-#define TESTBENCH           3
+/* #define STRING 		    1 */
+/* #define FILE_MODE	    2 */
+/* #define TESTBENCH           3 */
 
 // ******************************************************************** 
 // Regs for CDMA
@@ -55,7 +55,7 @@
 // ******************************************************************** 
 // Device path name for the GPIO device
 
-#define GPIO_TIMER_EN_NUM   0x7             // Set bit 7 to enable timere             
+#define GPIO_TIMER_EN_NUM   0x7             // Set bit 7 to enable timer
 #define GPIO_TIMER_CR       0x43C00000      // Control register
 #define GPIO_LED_NUM        0x7
 #define GPIO_LED            0x43C00004      // LED register
@@ -68,10 +68,20 @@ static volatile unsigned int det_int=0;     // Global flag that is volatile
 // ***************  Struct for keeping state of program ******************
 //
 
+typedef enum program_mode {
+        STRING,
+        FILE_MODE,
+        TESTBENCH
+} pmode;
+
 typedef struct program_state {
-        char*   aes_string;
-        char*   key_string;
-        int     mode;
+        char*           aes_string;
+        char*           key_string;
+        pmode           mode;
+        uint32_t*       cdma_addr;
+        uint32_t*       bram_addr;
+        uint32_t*       acc_addr;
+        uint32_t*       ocm_addr;
 } pstate;
 
 
@@ -94,14 +104,24 @@ int cdma_sync(unsigned int* dma_virtual_address);
 // Signal handler for interrupt
 void sighandler(int signo);
 
+// ******************  Init/Gerneral Helper Functions ******************
 // Init state from program args
 void init_state(int argc, char* argv[], pstate* state);
-
+// Setup interrupt (interrupt handler)
+void interrupt_setup(struct sigaction* pAction);
+// Setup Memory Mapped I/)
+void mm_setup(pstate* state);
+// Setup Testbench memory
+void testbench_setup(uint32_t* key, uint32_t* chunk, uint32_t* writeback_bram_addr,
+                     uint32_t bram_addr);
 // For printing AES values
-// Encrypt buffer (128 bits) goes to encrypt
-// aes string is returned to be printed
-// endian switch to 1 to change endianess
 void print_aes(char *aes, uint32_t *encrypt, int endian_switch);
+// Test SW time
+int software_time(char* aes_out, const unsigned char* key, unsigned char* text);
+// Check sw and hw values
+void compare_aes_values(char* hw_aes, char* sw_aes);
+// CDMA transfer
+void cmda_transfer(unsigned int* dest, unsigned int* src, int size);
 
 // ************************  Functions for latency testing
 unsigned long int_sqrt(unsigned long n);

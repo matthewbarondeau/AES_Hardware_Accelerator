@@ -62,19 +62,13 @@ unsigned char text_openssl[] = {
         0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17, 0x2a
 };
 
-// ***********************************************************************
 //  Time stamp set in the last sigio_signal_handler() invocation:
-
 struct timeval sigio_signal_timestamp;
 
-// ***********************************************************************
 //  Array of interrupt latency measurements
-
 unsigned long intr_latency_measurements[3000];
 
-
-// *************************  SIGHANDLER Vars ****************************
-//
+// SIGHANDLER Var
 volatile unsigned int  data_cnt; 
 
 // ***********************************************************************
@@ -82,242 +76,105 @@ volatile unsigned int  data_cnt;
 // ***********************************************************************
 
 int main(int argc, char * argv[])   {
-    unsigned int rx_cnt;        // Receive count
-    struct sigaction action;    // Structure for signalling
-    int fd;                     // File descriptor
-    int rc;
-    int fc;
-    pstate state;
     FILE* input_file;
     
+    // Init state from program args
+    pstate state;
     init_state(argc, argv, &state);
 
+    // Open the device file
+    struct sigaction action;    // Structure for signalling
+    interrupt_setup(&action);   
 
-//    memset(&action, 0, sizeof(action));
-    sigemptyset(&action.sa_mask);
-    sigaddset(&action.sa_mask, SIGIO);
-    
-    action.sa_handler = sighandler;
-    action.sa_flags = 0;
-
-    sigaction(SIGIO, &action, NULL);
-
-// *************************************************************************
-// Open the device file
-//     
-    
-    fd = open("/dev/acc_int", O_RDWR);
-    
-    if (fd == -1) {
-    	perror("Unable to open /dev/acc_interrupt");
-    	rc = fd;
-    	exit (-1);
-    }
-    
-    #ifdef DEBUG1
-        printf("/dev/dma_int opened successfully \n");    	
-    #endif
-    
-    fc = fcntl(fd, F_SETOWN, getpid());
-    
-    #ifdef DEBUG1
-        printf("Made it through fcntl\n");
-    #endif
-    
+    // Set up memory mapped io
+    mm_setup(&state);
         
-    if (fc == -1) {
-    	perror("SETOWN failed\n");
-    	rc = fd;
-    	exit (-1);
-    } 
-    
-    fc= fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_ASYNC);
-
-    if (fc == -1) {
-    	perror("SETFL failed\n");
-    	rc = fd;
-    	exit (-1);
-    }   
-
-
-// *************************************************************************
-// Open up /dev/mem for mmap operations
-//
-    int dh = open("/dev/mem", O_RDWR | O_SYNC); 
-    
-    if(dh == -1)
-	{
-		printf("Unable to open /dev/mem.  Ensure it exists (major=1, minor=1)\n");
-		printf("Must be root to run this routine.\n");
-		return -1;
-	}
-	                                          
-    
-    #ifdef DEBUG1                                     
-        printf("Getting ready to mmap cdma_virtual_address \n");    
-    #endif
-    
-    uint32_t* cdma_virtual_address = mmap(NULL, 
-                                          4096, 
-                                          PROT_READ | PROT_WRITE, 
-                                          MAP_SHARED, 
-                                          dh, 
-                                          CDMA); // Memory map AXI Lite register block
-    #ifdef DEBUG1                              
-        printf("cdma_virtual_address = 0x%.8x\n", cdma_virtual_address); 
-    #endif
-    
-    #ifdef DEBUG1                              
-        printf("Getting ready to mmap BRAM_virtual_address \n");    
-    #endif
-        
-    uint32_t* BRAM_virtual_address = mmap(NULL, 
-                                          4096, 
-                                          PROT_READ | PROT_WRITE, 
-                                          MAP_SHARED, 
-                                          dh, 
-                                          BRAM0); // Memory map AXI Lite register block
-    #ifdef DEBUG1        
-        printf("BRAM_virtual_address = 0x%.8x\n", BRAM_virtual_address); 
-    #endif                                    
-        
-// *************************************************************************
-// Set up the virtual address for the accelerator
-//
- 
-    uint32_t* acc_virtual_addr = mmap(NULL,
-                                 4096,
-                                 PROT_READ | PROT_WRITE, 
-                                 MAP_SHARED, 
-                                 dh, 
-                                 ACC); 
-    
-    
-// *************************************************************************
-// Set up the OCM with data to be transferred to the BRAM
-//
-    
-    uint32_t* ocm = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, dh, OCM);
-
-    // clear memory
-    
+    // *************************************************************************
     // Set up memory to hold data
     int size;
     int chunks = 1;
     char buffer[CHUNK_SIZE] = {0}; // 1 chunk
-    if (state.mode == STRING) { // assumes 1 chunk string input
-        printf("String mode\n");
-        // Key
-        assert(strlen(state.key_string) == 32); // make sure key is 256 bits plus null terminator
-        // put in ocm
-        char *pEnd = (char*)state.key_string;
-        pEnd += 4;
-        ocm[0] = (uint32_t)strtol(state.key_string, &pEnd, 16); // big endian
-        /* ocm[0] = (uint32_t)key_string[0]; */
-        for(int i = 1; i < 8; i++){
-                pEnd+=4;
-                ocm[i] = (uint32_t)strtol(pEnd, &pEnd, 16); // big endian
-                /* ocm[i] = htobe32(((uint32_t*)key_string)[i]); */ 
-        }
+    /* if (state.mode == STRING) { // assumes 1 chunk string input */
+    /*     printf("String mode\n"); */
+    /*     // Key */
+    /*     assert(strlen(state.key_string) == 32); // make sure key is 256 bits plus null terminator */
+    /*     // put in ocm */
+    /*     char *pEnd = (char*)state.key_string; */
+    /*     pEnd += 4; */
+    /*     ocm[0] = (uint32_t)strtol(state.key_string, &pEnd, 16); // big endian */
+    /*     /1* ocm[0] = (uint32_t)key_string[0]; *1/ */
+    /*     for(int i = 1; i < 8; i++){ */
+    /*             pEnd+=4; */
+    /*             ocm[i] = (uint32_t)strtol(pEnd, &pEnd, 16); // big endian */
+    /*             /1* ocm[i] = htobe32(((uint32_t*)key_string)[i]); *1/ */ 
+    /*     } */
 
-        // Data
-        printf("Put string in ocm\n");
-	size = strlen(state.aes_string); // aes_string in bytes
-	if(size < CHUNK_SIZE + 1) { // null terminator
-                for (int i = 0; i < size; i++) {
-                        buffer[i] = state.aes_string[i];
-                }
-                /* buffer[size] = 0x0a; // line feed */
-                /* buffer[size + 1] = 0x80; // 1 */
-                /* buffer[63] = (size+1)*8; // size in bytes */
-	} else {
-                printf("Does not support more than 1 chunk rn :(\n");
-                exit(-1);
-        }
-        // Write chunk to ocm for cdma
-        for(int i=0; i<4; i++)  {
-                ocm[i + 7] = htobe32(((uint32_t*)buffer)[i]); // data goes in ocm[8-11]
-        }
-    } else if (state.mode == FILE_MODE) {
-        input_file = fopen(state.aes_string, "r");    
+    /*     // Data */
+    /*     printf("Put string in ocm\n"); */
+	/* size = strlen(state.aes_string); // aes_string in bytes */
+	/* if(size < CHUNK_SIZE + 1) { // null terminator */
+    /*             for (int i = 0; i < size; i++) { */
+    /*                     buffer[i] = state.aes_string[i]; */
+    /*             } */
+    /*             /1* buffer[size] = 0x0a; // line feed *1/ */
+    /*             /1* buffer[size + 1] = 0x80; // 1 *1/ */
+    /*             /1* buffer[63] = (size+1)*8; // size in bytes *1/ */
+	/* } else { */
+    /*             printf("Does not support more than 1 chunk rn :(\n"); */
+    /*             exit(-1); */
+    /*     } */
+    /*     // Write chunk to ocm for cdma */
+    /*     for(int i=0; i<4; i++)  { */
+    /*             ocm[i + 7] = htobe32(((uint32_t*)buffer)[i]); // data goes in ocm[8-11] */
+    /*     } */
+    /* } else if (state.mode == FILE_MODE) { */
+    /*     input_file = fopen(state.aes_string, "r"); */    
         
-        // check file
-        if (input_file == 0) {
-                printf("Unable to open\n");
-                exit(-1);
-        }
+    /*     // check file */
+    /*     if (input_file == 0) { */
+    /*             printf("Unable to open\n"); */
+    /*             exit(-1); */
+    /*     } */
 
-        // do stuff here
-        else {
-                // read file
-                /* printf("Reading file\n"); */
-                int index = 0;
-                int c;
-                while ((c = fgetc(input_file)) != EOF) {
-                        buffer[index] = c;
-                        ++index;
-                }
-                fclose(input_file);
-                buffer[index] = 0x80;
+    /*     // do stuff here */
+    /*     else { */
+    /*             // read file */
+    /*             /1* printf("Reading file\n"); *1/ */
+    /*             int index = 0; */
+    /*             int c; */
+    /*             while ((c = fgetc(input_file)) != EOF) { */
+    /*                     buffer[index] = c; */
+    /*                     ++index; */
+    /*             } */
+    /*             fclose(input_file); */
+    /*             buffer[index] = 0x80; */
 
-                // figure out size
-                int size = index << 3; // in bits
-                chunks = size/512;
-                /* if(size % 512 != 0) */
-                        chunks++;
-                /* printf("chunks: %d, size: %d\n", chunks, size); */
-                /* buffer[(chunks - 1)*64 + 60] = size; */
-                // Write chunk to ocm for cdma
-                for(int i=0; i<chunks*16; i++)  {
-                        ocm[i] = htobe32(((uint32_t*)buffer)[i]);
-                }
-                /* printf("finished writing\n"); */
-                ocm[(chunks - 1)*16 + 15] = size;
-        }
+    /*             // figure out size */
+    /*             int size = index << 3; // in bits */
+    /*             chunks = size/512; */
+    /*             /1* if(size % 512 != 0) *1/ */
+    /*                     chunks++; */
+    /*             /1* printf("chunks: %d, size: %d\n", chunks, size); *1/ */
+    /*             /1* buffer[(chunks - 1)*64 + 60] = size; *1/ */
+    /*             // Write chunk to ocm for cdma */
+    /*             for(int i=0; i<chunks*16; i++)  { */
+    /*                     ocm[i] = htobe32(((uint32_t*)buffer)[i]); */
+    /*             } */
+    /*             /1* printf("finished writing\n"); *1/ */
+    /*             ocm[(chunks - 1)*16 + 15] = size; */
+    /*     } */
 
-    } else if (state.mode == TESTBENCH) {
-        /* // key */
-        /* ocm[0] = 0x603deb10; */
-        /* ocm[1] = 0x15ca71be; */
-        /* ocm[2] = 0x2b73aef0; */
-        /* ocm[3] = 0x857d7781; */
-        /* ocm[4] = 0x1f352c07; */
-        /* ocm[5] = 0x3b6108d7; */
-        /* ocm[6] = 0x2d9810a3; */
-        /* ocm[7] = 0x0914dff4; */
-
-        // chunk
-        ocm[0] = 0x6bc1bee2;
-        ocm[1] = 0x2e409f96;
-        ocm[2] = 0xe93d7e11;
-        ocm[3] = 0x7393172a;
-
+    /* } else if (state.mode == TESTBENCH) { */
+    if(state.mode == TESTBENCH) {
         #ifdef DEBUG
             printf("Testbench mode\n");
         #endif
-        // Key
-        /* memcpy(&(acc_virtual_addr[13]), key, sizeof(key)); */
-        acc_virtual_addr[13] = 0x603deb10;
-        acc_virtual_addr[14] = 0x15ca71be;
-        acc_virtual_addr[15] = 0x2b73aef0;
-        acc_virtual_addr[16] = 0x857d7781;
-        acc_virtual_addr[17] = 0x1f352c07;
-        acc_virtual_addr[18] = 0x3b6108d7;
-        acc_virtual_addr[19] = 0x2d9810a3;
-        acc_virtual_addr[20] = 0x0914dff4;
         
-        //21-28 used for key2
-
-        // write address for bram
-        // 1 chunk for now, so 16
-        acc_virtual_addr[29] = 16;
-
-        // chunk
-        /* memcpy(&(acc_virtual_addr[21]), text_openssl, sizeof(text_openssl)); */
-        /* acc_virtual_addr[21] = 0x6bc1bee2; */
-        /* acc_virtual_addr[22] = 0x2e409f96; */
-        /* acc_virtual_addr[23] = 0xe93d7e11; */
-        /* acc_virtual_addr[24] = 0x7393172a; */
+        // Setup testbench data
+        testbench_setup(state.ocm_addr,         // key addr
+                        &(state.acc_addr[13]),  // in chunk addr
+                        &(state.acc_addr[29]),  // addr for write bram addr
+                        16);                    // bram addr
 
     } else {
             printf("Idk how you got here\n");
@@ -327,193 +184,162 @@ int main(int argc, char * argv[])   {
     
     
     // RESET DMA
-    address_set(cdma_virtual_address, CDMACR, 0x0004);	    
-
+    address_set(state.cdma_addr, CDMACR, 0x0004);	    
+    
+// ****************************************************************************
+// The main meat
+//
     pid_t               childpid;
     int                 cnt;
     int                 status;
     int                 wpid;
     unsigned int        timer_value;
 
-  
-// ****************************************************************************
-// The main meat
-//
-        smb(GPIO_LED, GPIO_LED_NUM, 0x0); 
-        smb(GPIO_LED, 0x5, 0x0);            // Clear error indicator
+    smb(GPIO_LED, GPIO_LED_NUM, 0x0); 
+    smb(GPIO_LED, 0x5, 0x0);            // Clear error indicator
+    
+    // ********************************************************************
+    // Fork off a child process to start the DMA process
+    // 
+    #ifdef DEBUG 
+        printf("Fork\n");
+    #endif
+    
+    childpid = vfork();     // Need to use vfork to prevent race condition
 
-        #ifdef DEBUG 
-                printf("Fork\n");
-        #endif
-
-        // ********************************************************************
-        // Fork off a child process to start the DMA process
+    if (childpid >=0)       // Fork suceeded    
+    {
+        // ****************************************************************
+        // This code runs in the child process as the childpid == 0
         // 
-        
-        childpid = vfork();     // Need to use vfork to prevent race condition
-
-        if (childpid >=0)       // Fork suceeded    
+            
+        if (childpid == 0)
         {
-            // ****************************************************************
-            // This code runs in the child process as the childpid == 0
-            // 
+            // Transfer Data into BRAM form CDMA
+            #ifdef DEBUG
+                printf("Starting cdma transfer\n");
+            #endif
+
+            int transfer_size = 16; //1 chunk = 128 bits = 16 bytes
+            address_set(state.cdma_addr, DA, BRAM1); // Write destination address
+            address_set(state.cdma_addr, SA, OCM);   // Write source address
+            address_set(state.cdma_addr, BTT, transfer_size); // Start transfer
+            cdma_sync(state.cdma_addr);
+                
+            #ifdef DEBUG
+                printf("CDMA done, starting accelerator now\n");
+            #endif
+
+            // setup sha, one for now
+            if(chunks > 1)
+                chunks++;
+            address_set(state.acc_addr, NUM_CHUNKS, chunks); // 1 chunk
+            address_set(state.acc_addr, START_ADDR, 0x0); // start addr
+            address_set(state.acc_addr, FIRST_REG, 0x0);  // Reset sha unit
+            // start aes and timer 
+            smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x1);     // Start timer
+            smb(GPIO_LED, GPIO_LED_NUM, 0x1);               // Turn on the LED
+            address_set(state.acc_addr, FIRST_REG, 0x3);  // Enable aes conversion
+            address_set(state.acc_addr, FIRST_REG, 0x2);  // Turn off start
+                
+            #ifdef DEBUG
+                printf("Exiting child process\n");
+            #endif
+
+            exit(0);  // Exit the child process
+        }
             
-            if (childpid == 0)
-            {
-                // Transfer Data into BRAM form CDMA
-                #ifdef DEBUG
-                        printf("Starting cdma transfer\n");
-                #endif
-
-                /* int transfer_size = chunks*64; //64 bytes per chunk */
-                int transfer_size = 16; //1 chunk = 128 bits = 16 bytes
-                address_set(cdma_virtual_address, DA, BRAM1);       // Write destination address
-                address_set(cdma_virtual_address, SA, OCM);         // Write source address
-                address_set(cdma_virtual_address, BTT, transfer_size); // Start transfer
-                cdma_sync(cdma_virtual_address);
+        // ***********************************************************
+        // This code runs in the parent process as the childpid != 0
+        // 
+        else 
+        {
+            // ******************************************************
+            // Wait for child process to terminate before checking 
+            // for interrupt 
                 
-                #ifdef DEBUG
-                        printf("CDMA done, starting accelerator now\n");
-                #endif
-
-                // setup sha, one for now
-                if(chunks > 1)
-                        chunks++;
-                address_set(acc_virtual_addr, NUM_CHUNKS, chunks); // 1 chunk
-                address_set(acc_virtual_addr, START_ADDR, 0x0); // start addr
-                address_set(acc_virtual_addr, FIRST_REG, 0x0);  // Reset sha unit
-                // start sha and timer 
-                smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x1);     // Start timer
-                smb(GPIO_LED, GPIO_LED_NUM, 0x1);               // Turn on the LED
-                address_set(acc_virtual_addr, FIRST_REG, 0x3);  // Enable aes conversion
-                address_set(acc_virtual_addr, FIRST_REG, 0x2);  // Turn off start
+            while (!det_int);
                 
-                #ifdef DEBUG
-                        printf("Exiting child process\n");
-                #endif
+            address_set(state.acc_addr, FIRST_REG, 0x2);  // Disable sha conversion
+            timer_value = rm(GPIO_TIMER_VALUE);             // Read the timer value
+            smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x0);     // Disable timer
+            smb(GPIO_LED, GPIO_LED_NUM, 0x0);               // Turn off the LED
 
-                exit(0);  // Exit the child process
+            // do cmda read back
+            int transfer_size = 16; //1 chunk = 128 bits = 16 bytes
+            address_set(state.cdma_addr, DA, (OCM + transfer_size));       // Write destination address
+            address_set(state.cdma_addr, SA, (BRAM1 + transfer_size));         // Write source address
+            address_set(state.cdma_addr, BTT, transfer_size); // Start transfer
+            cdma_sync(state.cdma_addr);
+                
+            /* #ifdef DEBUG */
+                printf("CDMA write back done, printing\n");
+            /* #endif */
+
+
+                
+            // Print value of ecb mode aes from hw
+            char aes[80] = {0};
+            print_aes(aes, &(state.ocm_addr[4]), 0);
+            printf("HW AES is: %s\n", aes);
+                
+            // Calculate in sw and see time
+            int diff = 1; // in us
+            if(state.mode == TESTBENCH) {
+                char sw_aes[80] = {0};
+                diff = software_time(sw_aes, key, text_openssl);
+                compare_aes_values(aes, sw_aes);
             }
-            
-            // *************************************************************************
-            // This code runs in the parent process as the childpid != 0
-            // 
-          
-           else 
-           {
-                // *********************************************************************
-                // Wait for child process to terminate before checking for interrupt 
-                // 
-                                
-                while (!det_int);
-                
-                
-                address_set(acc_virtual_addr, FIRST_REG, 0x2);  // Disable sha conversion
-                timer_value = rm(GPIO_TIMER_VALUE);             // Read the timer value
-                smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x0);     // Disable timer
-                smb(GPIO_LED, GPIO_LED_NUM, 0x0);               // Turn off the LED
 
-                // do cmda read back
-                int transfer_size = 16; //1 chunk = 128 bits = 16 bytes
-                address_set(cdma_virtual_address, DA, (OCM + transfer_size));       // Write destination address
-                address_set(cdma_virtual_address, SA, (BRAM1 + transfer_size));         // Write source address
-                address_set(cdma_virtual_address, BTT, transfer_size); // Start transfer
-                cdma_sync(cdma_virtual_address);
+            /* int hw_nsecs = timer_value*13; // 75Mhz = 13,333 us per */ 
+            /* int sw_nsecs = diff; */
+            /* printf("Time HW =  %d ns\n", timer_value*13); */
+            /* printf("Speedup: %d\n", sw_nsecs/hw_nsecs); */
+            #ifdef DEBUG
+                printf("Done with calculations\n");
+            #endif
                 
-                /* #ifdef DEBUG */
-                        printf("CDMA write back done, printing\n");
-                /* #endif */
-
-
+            det_int = 0;                    // Clear interrupt detected flag
+            /* address_set(state.cdma_addr, CDMACR, 0x0000);  // Disable interrupts */
                 
-                // Print value of ecb mode aes from hw
-                char aes[80] = {0};
-                /* print_aes(aes, &(acc_virtual_addr[8]), 0); */
-                print_aes(aes, (&ocm[4]), 0);
-                printf("HW AES is: %s\n", aes);
+            /* if(timer_value < 10) smb(GPIO_LED, 0x3, 0x1); */
+            /* intr_latency_measurements[cnt] = timer_value; */
                 
-                // Calculate in sw and see time
-                int diff = 1;
-                if(state.mode == TESTBENCH) {
-                        // time setup
-                        struct timeval first, last;
-                        gettimeofday(&first, 0);
-
-                        // Encrypt in software
-                        char enc_out[80];
-                        AES_KEY enc_key;
-                        AES_set_encrypt_key(key, 256, &enc_key);
-                        AES_ecb_encrypt(text_openssl, enc_out, &enc_key, 1);
-
-                        // time again
-                        gettimeofday(&last, 0);
-                        diff = (last.tv_sec - first.tv_sec) * 100000 +
-                                (last.tv_usec - first.tv_usec);
-                        diff *= 1000; //convert to ns
-
-                        // print
-                        char sw_aes[80] = {0};
-                        print_aes(sw_aes, (uint32_t*)enc_out, 1);
-                        printf("SW aes is: %s\n", sw_aes);
-                        int compare = strcmp(aes, sw_aes);
-                        if(compare != 0) {
-                                printf("SW and HW values not the same!!!\n");
-                        } else {
-                                printf("SW and HW AES values the same :)\n");
-                        }
-                        printf("Time SW = %d ns\n", diff);
-                }
-
-                /* int hw_nsecs = timer_value*13; // 75Mhz = 13,333 us per */ 
-                /* int sw_nsecs = diff; */
-                /* printf("Time HW =  %d ns\n", timer_value*13); */
-                /* printf("Speedup: %d\n", sw_nsecs/hw_nsecs); */
-
-                /* printf("Done with all that stuff\n"); */
-                
-                /* det_int = 0;                    // Clear interrupt detected flag */
-                /* address_set(cdma_virtual_address, CDMACR, 0x0000);  // Disable interrupts */
-                
-                /* if(timer_value < 10) smb(GPIO_LED, 0x3, 0x1); */
-                /* intr_latency_measurements[cnt] = timer_value; */
-                
-/*                 // ********************************************************************* */
-/*                 // Check to make sure transfer was correct */
-/*                 // */ 
+/*          // ********************************************************************* */
+/*          // Check to make sure transfer was correct */
                            
-                               
-/*                 for(int i=0; i < data_cnt; i++) */
-/*                 { */
-/*                     if(BRAM_virtual_address[i] != ocm[i]) */
-/*                     { */
-/*                         printf("test failed!!\n"); */ 
-/*                         smb(GPIO_LED, 0x5, 0x1); */
-/*                         #ifdef DEBUG2 */
-/*                         printf("BRAM result: 0x%.8x and c result is 0x%.8x  element %4d\n", */ 
-/*                                BRAM_virtual_address[i], ocm[i], i); */
-/*                         //printf("data_cnt = 0x%.8x\n", i); */ 
-/*                         #endif */
+/*          for(int i=0; i < data_cnt; i++) */
+/*          { */
+/*              if(BRAM_virtual_address[i] != ocm[i]) */
+/*              { */
+/*                  printf("test failed!!\n"); */ 
+/*                  smb(GPIO_LED, 0x5, 0x1); */
+/*                  #ifdef DEBUG2 */
+/*                      printf("BRAM result: 0x%.8x and c result is 0x%.8x  element %4d\n", */ 
+/*                      BRAM_virtual_address[i], ocm[i], i); */
+/*                      //printf("data_cnt = 0x%.8x\n", i); */ 
+/*                  #endif */
                         
-/*                         munmap(ocm,65536); */
-/*                         munmap(cdma_virtual_address,4096); */
-/*                         munmap(BRAM_virtual_address,4096); */
-/*                         munmap(acc_virtual_addr, 4096); */
-/*                     return -1; */
-/*                     } */
-/*                 } */
-/*                 #ifdef DEBUG */
-/*                 printf("test passed!!\n"); */
-/*                 #endif */
+/*                  munmap(ocm,65536); */
+/*                  munmap(state.cdma_addr,4096); */
+/*                  munmap(BRAM_virtual_address,4096); */
+/*                  munmap(state.acc_addr, 4096); */
+/*                  return -1; */
+/*              } */
+/*          } */
+/*          #ifdef DEBUG */
+/*              printf("test passed!!\n"); */
+/*          #endif */
                 
 
-             } // if chilpid ==0
-       } // if childpid >=0
+        } // if chilpid ==0
+    } // if childpid >=0
 
-       else  // fork failed
-       {
+    else  // fork failed
+    {
            perror("Fork failed");
            exit(0);
-       } // if childpid >=0
+    } // if childpid >=0
        
 /*
         
@@ -559,10 +385,10 @@ int main(int argc, char * argv[])   {
     // **************** UNMAP all open Memory Blocks *******************
     //
 EXIT:
-    munmap(ocm,65536);
-    munmap(cdma_virtual_address,4096);
-    munmap(BRAM_virtual_address,4096);
-    munmap(acc_virtual_addr, 4096);
+    munmap(state.ocm_addr,65536);
+    munmap(state.cdma_addr,4096);
+    munmap(state.bram_addr,4096);
+    munmap(state.acc_addr, 4096);
     return 0; 
     
 }   // END OF main
