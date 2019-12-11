@@ -60,6 +60,7 @@ module AES_TOP(
 	reg	  [4:0]		NXT_STATE;	
 
 	reg	  [31:0]	block_reg_core1	[0:3];
+  reg   [31:0]  write_reg_core1 [0:3];
 	wire  [127:0] core1_block;
 
   assign core1_block  	= {	block_reg_core1[0], block_reg_core1[1],
@@ -104,6 +105,7 @@ module AES_TOP(
 			aes_bram_write_addr <= 32'h0;
 			aes_data_valid  <= 1'h0;
 			reg_num_nxt			<= 4'h0;
+      write_reg_num_nxt <= 4'b0;
 			aes_start_read	<= 1'b0;
 			aes_complete		<= 1'b0;			
 			NXT_STATE			  <= INIT;			
@@ -162,9 +164,30 @@ module AES_TOP(
         NXT_STATE <= AES_WRITE1;
 			  //aes_complete <= 1'b1;
         aes_result_reg <= aes_result;
+        write_reg_core1[0] <= aes_result[127:96];
+        write_reg_core1[1] <= aes_result[95:64];
+        write_reg_core1[2] <= aes_result[63:32];
+        write_reg_core1[3] <= aes_result[31:0];
       end else if(STATE == AES_WRITE1) begin
         aes_start_write <= 1'b1;
-        aes_bram_write_data <= aes_result;
+        case(write_reg_num)
+          0: begin
+            aes_bram_write_data <= write_reg_core1[0];
+          end
+          
+          1: begin
+            aes_bram_write_data <= write_reg_core1[1];
+          end
+          
+          2: begin
+            aes_bram_write_data <= write_reg_core1[2];
+          end
+          
+          3: begin
+            aes_bram_write_data <= write_reg_core1[3];
+          end
+        
+        endcase
         NXT_STATE <= AES_WRITE2;
       end else if((STATE == AES_WRITE2) && (~bram_complete)) begin
         NXT_STATE <= AES_WRITE2;
