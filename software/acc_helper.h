@@ -44,6 +44,7 @@
 #define DA                  0x20
 #define DA_MSB              0x24
 #define BTT                 0x28
+#define TRANSFER_SIZE(size) (size<<4)
 
 // ******************************************************************** 
 // Regs for Acclerator
@@ -79,12 +80,22 @@ typedef struct program_state {
         char*           key_string;
         pmode           mode;
         uint32_t        chunks;
+        uint32_t        timer_value;
         uint32_t*       cdma_addr;
         uint32_t*       bram_addr;
         uint32_t*       acc_addr;
         uint32_t*       ocm_addr;
 } pstate;
 
+// ***************  Struct for AES transaction  ******************
+//
+
+typedef struct aes_transaction {
+        uint32_t*       key;
+        uint32_t*       data;
+        uint32_t*       writeback_bram_addr;
+        uint32_t        bram_addr;
+} aes_t;
 
 // ************************  FUNCTION PROTOTYPES ***********************
 //       
@@ -115,22 +126,22 @@ void interrupt_setup(struct sigaction* pAction);
 // Setup Memory Mapped I/)
 void mm_setup(pstate* state);
 // Setup String mode memory
-void string_setup(pstate* state, uint32_t* key, uint32_t* data,
-                uint32_t* writeback_bram_addr, uint32_t bram_addr);
+void string_setup(pstate* state, aes_t* transaction);
+// Setup File mode memory
+void file_setup(pstate* state, aes_t* transaction);
 // Setup Testbench memory
-void testbench_setup(uint32_t* key, uint32_t* chunk, uint32_t* writeback_bram_addr,
-                     uint32_t bram_addr);
+void testbench_setup(aes_t* transaction);
 // For printing AES values
 void print_aes(char *aes, uint32_t *encrypt, int endian_switch);
 // Test SW time
 int software_time(char* aes_out, const unsigned char* key, unsigned char* text);
 // Check sw and hw values
-void compare_aes_values(char* hw_aes, char* sw_aes);
+void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state, int diff);
 // CDMA transfer
 void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size);
 
 // ************************  Functions for latency testing
-unsigned long int_sqrt(unsigned long n);
+/* unsigned long int_sqrt(unsigned long n); */
 /* void compute_interrupt_latency_stats( unsigned long   *min_latency_p, */ 
 /*                                       unsigned long   *max_latency_p, */ 
 /*                                       unsigned long   *average_latency_p, */ 

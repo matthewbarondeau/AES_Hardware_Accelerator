@@ -349,68 +349,112 @@ void mm_setup(pstate* state)
 // Set key and chunk data to correct value
 // Assumes key and data values are ascii not hex (ie 'a' is 0x61, not 0x0A)
 
-void string_setup(pstate* state, uint32_t* key, uint32_t* data, uint32_t* writeback_bram_addr,
-                  uint32_t bram_addr)
+void string_setup(pstate* state, aes_t* transaction)
 {
-    int size;
     char buffer[CHUNK_SIZE] = {0}; // 1 chunk
 
     // Key
-    assert(strlen(state->key_string) == 32); // make sure key is 256 bits 
+    assert(strlen(state->key_string) == 32); // 32*8= 256 bits 
 
     // put key in key buffer
-    char *pEnd = (char*)state->key_string;
-    pEnd += 4;
-    key[0] = (uint32_t)strtol(state->key_string, &pEnd, 16); // big endian
-    /* ocm[0] = (uint32_t)key_string[0]; */
-    for(int i = 1; i < 8; i++){
-        pEnd+=4;
-        key[i] = (uint32_t)strtol(pEnd, &pEnd, 16); // big endian
-        /* ocm[i] = htobe32(((uint32_t*)key_string)[i]); */ 
+    for(int i = 0; i < 8; i++){
+        transaction->key[i] = htobe32(((uint32_t*)(state->key_string))[i]);
     }
 
     // Data
-    printf("Put string in ocm\n");
-    size = strlen(state->aes_string); // aes_string in bytes
-    if(size < CHUNK_SIZE + 1) { // null terminator
+    #ifdef DEBUG
+        printf("Put string in data buffer\n");
+    #endif
+    int size = strlen(state->aes_string); // aes_string in bytes
+    if(size < CHUNK_SIZE + 1) { 
         for (int i = 0; i < size; i++) {
             buffer[i] = state->aes_string[i];
         }
     } else {
+        printf("Size: %d\n", size);
         printf("Does not support more than 1 chunk rn :(\n");
         exit(-1);
     }
-    // Write chunk to ocm for cdma
-    for(int i=0; i<4; i++)  {
-        data[i] = htobe32(((uint32_t*)buffer)[i]); 
+
+    // Write chunk to data_buffer for cdma
+    for(int i=0; i<state->chunks*4; i++)  {
+        transaction->data[i] = htobe32(((uint32_t*)buffer)[i]);
     }
 
+    *(transaction->writeback_bram_addr) = transaction->bram_addr;
+
 }
+
+// *************************  File Mode setup ***************************
+// Setup File mode memory
+void file_setup(pstate* state, aes_t* transaction)
+{
+        // open file
+        FILE* input_file = fopen(state->aes_string, "r");    
+        
+        char buffer[CHUNK_SIZE] = {0}; // 1 chunk
+        // just doing 1 chunk for now
+        
+        // check file
+        if (input_file == 0) {
+                printf("Unable to open\n");
+                exit(-1);
+        } else { 
+                // Need to get key input
+               
+                // read file
+                #ifdef DEBUG
+                    printf("Reading input file\n");
+                #endif
+                int index = 0;
+                int c;
+                while ((c = fgetc(input_file)) != EOF) {
+                        buffer[index] = c;
+                        ++index;
+                }
+                fclose(input_file);
+
+                // figure out size
+                int size = index << 3; // in bits
+                state->chunks = size/CHUNK_SIZE;
+                /* if(size % 512 != 0) */
+                        state->chunks++;
+                /* printf("chunks: %d, size: %d\n", chunks, size); */
+                // Write chunk to buffer for cdma
+                for(int i=0; i<state->chunks*4; i++)  { // 4 32 bit words in a chunk
+                        transaction->data[i] = htobe32(((uint32_t*)buffer)[i]);
+                }
+                #ifdef DEBUG
+                    printf("finished writing\n");
+                #endif
+        }
+}
+
 
 // *************************  Testbench setup ***************************
 // Set key and chunk data to correct value 
 
-void testbench_setup(uint32_t* key, uint32_t* chunk, uint32_t* writeback_bram_addr,
-                     uint32_t bram_addr)
+void testbench_setup(aes_t* transaction)
 {
     // Set key
-    key[0] = 0x6bc1bee2;
-    key[1] = 0x2e409f96;
-    key[2] = 0xe93d7e11;
-    key[3] = 0x7393172a;
+    transaction->key[0] = 0x603deb10;
+    transaction->key[1] = 0x15ca71be;
+    transaction->key[2] = 0x2b73aef0;
+    transaction->key[3] = 0x857d7781;
+    transaction->key[4] = 0x1f352c07;
+    transaction->key[5] = 0x3b6108d7;
+    transaction->key[6] = 0x2d9810a3;
+    transaction->key[7] = 0x0914dff4;
+
+    // Set key
+    transaction->data[0] = 0x6bc1bee2;
+    transaction->data[1] = 0x2e409f96;
+    transaction->data[2] = 0xe93d7e11;
+    transaction->data[3] = 0x7393172a;
     
-    // Set data
-    chunk[0] = 0x603deb10;
-    chunk[1] = 0x15ca71be;
-    chunk[2] = 0x2b73aef0;
-    chunk[3] = 0x857d7781;
-    chunk[4] = 0x1f352c07;
-    chunk[5] = 0x3b6108d7;
-    chunk[6] = 0x2d9810a3;
-    chunk[7] = 0x0914dff4;
 
     // Set BRAM addr chunks written back to
-    writeback_bram_addr[0] = bram_addr;
+    transaction->writeback_bram_addr[0] = transaction->bram_addr;
 
 }
 
@@ -461,14 +505,26 @@ int software_time(char* aes_out, const unsigned char* key, unsigned char* text)
 }
 
 // Compare 2 AES values
-void compare_aes_values(char* hw_aes, char* sw_aes)
+void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state,
+                        int diff)
 {
     int compare = strcmp(hw_aes, sw_aes);
     if(compare != 0) {
         printf("SW and HW values not the same!!!\n");
-    } else {
-        printf("SW and HW AES values the same :)\n");
+        exit(-1);
+    } 
+    #ifdef DEBUG 
+    else {
+            printf("SW and HW AES values the same :)\n");
     }
+    
+    int hw_nsecs = state->timer_value*13; // 75Mhz = 13,333 us per 
+    int sw_nsecs = diff;
+    printf("Time HW =  %d ns\n", state->timer_value*13);
+    printf("Speedup: %d\n", sw_nsecs/hw_nsecs);
+
+    #endif
+
 }
 
 // *************************  Init State ******************************
@@ -515,14 +571,14 @@ void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size)
 // *************************  COMPUTE INT LATENCY ***************************
 //  This routine does the interrupt handling for the main loop.
 //
-unsigned long int_sqrt(unsigned long n)
-{
-	for(unsigned int i = 1; i < n; i++)
-	{
-		if(i*i > n)
-			return i - 1;
-	}
-}
+/* unsigned long int_sqrt(unsigned long n) */
+/* { */
+/* 	for(unsigned int i = 1; i < n; i++) */
+/* 	{ */
+/* 		if(i*i > n) */
+/* 			return i - 1; */
+/* 	} */
+/* } */
 
 /* void compute_interrupt_latency_stats( unsigned long   *min_latency_p, */ 
 /*                                       unsigned long   *max_latency_p, */ 
@@ -562,4 +618,47 @@ unsigned long int_sqrt(unsigned long n)
 /* 	} */
 /* 	*std_deviation_p = int_sqrt(sum/lp_cnt); */
 /* } */
+   
+/*
+        
+    // **************** Compute interrupt latency stats *******************
+    //
+    unsigned long    min_latency; 
+    unsigned long    max_latency; 
+    unsigned long    average_latency; 
+    unsigned long    std_deviation; 
+     
+    compute_interrupt_latency_stats(
+                    &min_latency, 
+                    &max_latency,
+                    &average_latency, 
+                    &std_deviation);
 
+    // **************** Print interrupt latency stats *******************
+    //
+    printf("-----------------------------------------------\n");
+    printf("\nTest passed ----- %d loops and %d words \n", lp_cnt, (data_cnt+1));
+    printf("Minimum Latency:    %lu\n" 
+           "Maximum Latency:    %lu\n" 
+           "Average Latency:    %lu\n" 
+           "Standard Deviation: %lu\n",
+            min_latency, 
+            max_latency, 
+            average_latency, 
+            std_deviation);
+     // Get interrupt number usage from /proc/interrupts
+	char * buf = NULL;
+	FILE *fp = fopen("/proc/interrupts", "r");
+	int len;
+	while(getline(&buf, &len, fp) != -1) {
+		if (buf[1] == '4' && buf[2] == '6') {
+			printf("%s", buf);
+			break;
+		}
+	}
+	fclose(fp);
+*/
+// SIGHANDLER Var
+/* volatile unsigned int  data_cnt; */ 
+//  Array of interrupt latency measurements
+/* unsigned long intr_latency_measurements[3000]; */
