@@ -48,76 +48,7 @@
 // Local includes
 #include "acc_helper.h"
 
-// ******************************************************************** 
-//                              DEFINES
-// ******************************************************************** 
-
-// ******************************************************************** 
-// Debug defines
-#undef DEBUG 
-#undef DEBUG1
-#undef DEBUG2
-#undef DEBUG_BRAM
-#define DEBUG                    // Comment out to turn off debug messages
-/* #define DEBUG1                   // Comment out to turn off debug messages */
-//#define DEBUG2
-//#define DEBUG_BRAM
-
-// ******************************************************************** 
-// Memomoy Map
-#define CDMA                0x70000000
-#define BRAM0               0x40000000
-#define BRAM1               0x40000000
-#define ACC                 0x44000000
-#define OCM                 0xFFFC0000
-
-// ******************************************************************** 
-// Modes
-#define STRING 		    1
-#define FILE_MODE	    2
-#define TESTBENCH           3
-
-// ******************************************************************** 
-// Regs for CDMA
-#define CDMACR              0x00
-#define CDMASR              0x04
-#define CURDESC_PNTR        0x08
-#define CURDESC_PNTR_MSB    0x0C
-#define TAILDESC_PNTR       0x10
-#define TAILDESC_PNTR_MSB   0x14
-#define SA                  0x18
-#define SA_MSB              0x1C
-#define DA                  0x20
-#define DA_MSB              0x24
-#define BTT                 0x28
-
-// ******************************************************************** 
-// Regs for Acclerator
-#define CHUNK_SIZE          0x10 // 16 bytes per chunk
-#define NUM_CHUNKS          0x14
-#define START_ADDR          0x18
-#define FIRST_REG           0x00
-
-/* // ******************************************************************** */ 
-/* // One-bit masks for bits 0-31 */
-
-/* #define ONE_BIT_MASK(_bit)    (0x00000001 << (_bit)) */
-
-/* // ******************************************************************** */ 
-
-/* #define MAP_SIZE 4096UL */
-/* #define MAP_MASK (MAP_SIZE - 1) */
-
-// ******************************************************************** 
-// Device path name for the GPIO device
-
-#define GPIO_TIMER_EN_NUM   0x7             // Set bit 7 to enable timere             
-#define GPIO_TIMER_CR       0x43C00000      // Control register
-#define GPIO_LED_NUM        0x7
-#define GPIO_LED            0x43C00004      // LED register
-#define GPIO_TIMER_VALUE    0x43C0000C      // Timer value
-
-// *********************************************************************
+// ***********************************************************************
 // const for keys/value for testbench values 
 static const unsigned char key[] = {
         0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe,
@@ -131,136 +62,20 @@ unsigned char text_openssl[] = {
         0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17, 0x2a
 };
 
-// *********************************************************************
+// ***********************************************************************
 //  Time stamp set in the last sigio_signal_handler() invocation:
 
 struct timeval sigio_signal_timestamp;
 
-// *********************************************************************
+// ***********************************************************************
 //  Array of interrupt latency measurements
 
 unsigned long intr_latency_measurements[3000];
 
 
-/* // ************************  FUNCTION PROTOTYPES *********************** */
-/* // */       
-
-/* int smb(unsigned int target_addr, unsigned int pin_number, unsigned int bit_val); */
-/* int pm( unsigned int target_addr, unsigned int value ); */
-/* unsigned int rm( unsigned int target_addr); */
-
-/* unsigned long int_sqrt(unsigned long n); */
-
-/* void compute_interrupt_latency_stats( unsigned long   *min_latency_p, */ 
-/*                                       unsigned long   *max_latency_p, */ 
-/*                                       unsigned long   *average_latency_p, */ 
-/*                                       unsigned long   *std_deviation_p); */ 
-
-
-// *************************  ADDRESS_SET ************************************   
+// *************************  SIGHANDLER Vars ****************************
 //
-
-unsigned int address_set(unsigned int* virtual_address, int offset, unsigned int value) {
-    virtual_address[offset>>2] = value;
-}
-
-// ***************************  DMA_GET ************************************ 
-
-unsigned int dma_get(unsigned int* dma_virtual_address, int offset) {
-    return dma_virtual_address[offset>>2];
-}
-
-int cdma_sync(unsigned int* dma_virtual_address) {
-    unsigned int status = dma_get(dma_virtual_address, CDMASR);
-    if( (status&0x40) != 0)
-    {
-        unsigned int desc = dma_get(dma_virtual_address, CURDESC_PNTR);
-        printf("error address : %X\n", desc);
-    }
-    while(!(status & 1<<1)){
-        status = dma_get(dma_virtual_address, CDMASR);
-    }
-}
-// *************************  SIGHANDLER  ********************************
-//  This routine does the interrupt handling for the main loop.
-//
-static volatile unsigned int det_int=0;  // Global flag that is volatile i.e., no caching
-
-void sighandler(int signo)
-{
-    if (signo==SIGIO)
-        det_int++;      // Set flag
-    #ifdef DEBUG1        
-         printf("Interrupt captured by SIGIO\n");  // DEBUG
-    #endif
-   
-    return;  /* Return to main loop */
-
-}
-
-volatile unsigned int  data_cnt, lp_cnt; 
-
-// *************************  COMPUTE INT LATENCY ******************************
-//  This routine does the interrupt handling for the main loop.
-//
-unsigned long int_sqrt(unsigned long n)
-{
-	for(unsigned int i = 1; i < n; i++)
-	{
-		if(i*i > n)
-			return i - 1;
-	}
-}
-
-void compute_interrupt_latency_stats( unsigned long   *min_latency_p, 
-                                      unsigned long   *max_latency_p, 
-                                      unsigned long   *average_latency_p, 
-                                      unsigned long   *std_deviation_p)
-{
-	int number_of_ones = 0;
-	*min_latency_p = INT_MAX;
-	*max_latency_p = 0;
-	unsigned long sum = 0;
-	for(int index = 0;index < lp_cnt;index++)
-	{
-		if(intr_latency_measurements[index] < *min_latency_p)
-			*min_latency_p = intr_latency_measurements[index];
-		if(intr_latency_measurements[index] > *max_latency_p)
-			*max_latency_p = intr_latency_measurements[index];
-		if(intr_latency_measurements[index] == 1)
-			number_of_ones++;
-		sum += intr_latency_measurements[index];
-#ifdef DEBUG
-printf("DEBUG: Number of ones: %ld\n", intr_latency_measurements[index]);
-#endif
-	}
-	*average_latency_p = sum / lp_cnt;
-//	printf("DEBUG: Number of ones: %d\n", number_of_ones);
-	//Standard Deviation
-	sum = 0;
-	for(int index = 0;index < lp_cnt;index++)
-	{
-		int temp = intr_latency_measurements[index] - *average_latency_p;
-		sum += temp*temp;
-	}
-	*std_deviation_p = int_sqrt(sum/lp_cnt);
-}
-
-// *************************  print_aes ******************************
-// Puts hex from encrypt array into aes as a string for printing
-// Assumes that aes is 33 bytes (32 bytes for each hex + null)
-//
-void print_aes(char *aes, uint32_t *encrypt, int endian_switch) {
-        char tstr[20];
-        for(int index = 0; index < 4; index++) {
-                if(endian_switch)
-                        sprintf(tstr, "%.8x", be32toh(encrypt[index]));
-                else
-                        sprintf(tstr, "%.8x", encrypt[index]);
-                strcat(aes, tstr);
-        }
-        /* aes[32] = '\0'; */
-}
+volatile unsigned int  data_cnt; 
 
 // ***********************************************************************
 //                              MAIN 
@@ -272,35 +87,11 @@ int main(int argc, char * argv[])   {
     int fd;                     // File descriptor
     int rc;
     int fc;
-    char * aes_string;
-    char * key_string;
+    pstate state;
     FILE* input_file;
-    int mode;
     
-    if (argc < 4 && (strcmp(argv[1], "-tb") != 0)) {
-		printf("Wrong number of args for program \n");
-		return -1;
-	}
-	
-    if (strcmp(argv[1], "-s") == 0) {
-	mode = STRING;
-        aes_string = argv[2];
-        key_string = argv[3];
-	printf("String mode, using string \"%s\" \n", aes_string);
-    }
-    else if (strcmp(argv[1], "-f") == 0) {
-	/* printf("File mode \n"); */
-	mode = FILE_MODE;
-        aes_string = argv[2];
-    } else if (strcmp(argv[1], "-tb") == 0) {
-        // testbench mode, ie inputs from secwork testbench
-        mode = TESTBENCH;
-    }
-    else {
-	printf("No mode specifier\n");
-	return -1;
-    }
-	
+    init_state(argc, argv, &state);
+
 
 //    memset(&action, 0, sizeof(action));
     sigemptyset(&action.sa_mask);
@@ -414,14 +205,14 @@ int main(int argc, char * argv[])   {
     int size;
     int chunks = 1;
     char buffer[CHUNK_SIZE] = {0}; // 1 chunk
-    if (mode == STRING) { // assumes 1 chunk string input
+    if (state.mode == STRING) { // assumes 1 chunk string input
         printf("String mode\n");
         // Key
-        assert(strlen(key_string) == 32); // make sure key is 256 bits plus null terminator
+        assert(strlen(state.key_string) == 32); // make sure key is 256 bits plus null terminator
         // put in ocm
-        char *pEnd = (char*)key_string;
+        char *pEnd = (char*)state.key_string;
         pEnd += 4;
-        ocm[0] = (uint32_t)strtol(key_string, &pEnd, 16); // big endian
+        ocm[0] = (uint32_t)strtol(state.key_string, &pEnd, 16); // big endian
         /* ocm[0] = (uint32_t)key_string[0]; */
         for(int i = 1; i < 8; i++){
                 pEnd+=4;
@@ -431,10 +222,10 @@ int main(int argc, char * argv[])   {
 
         // Data
         printf("Put string in ocm\n");
-	size = strlen(aes_string); // aes_string in bytes
+	size = strlen(state.aes_string); // aes_string in bytes
 	if(size < CHUNK_SIZE + 1) { // null terminator
                 for (int i = 0; i < size; i++) {
-                        buffer[i] = aes_string[i];
+                        buffer[i] = state.aes_string[i];
                 }
                 /* buffer[size] = 0x0a; // line feed */
                 /* buffer[size + 1] = 0x80; // 1 */
@@ -447,8 +238,8 @@ int main(int argc, char * argv[])   {
         for(int i=0; i<4; i++)  {
                 ocm[i + 7] = htobe32(((uint32_t*)buffer)[i]); // data goes in ocm[8-11]
         }
-    } else if (mode == FILE_MODE) {
-        input_file = fopen(aes_string, "r");    
+    } else if (state.mode == FILE_MODE) {
+        input_file = fopen(state.aes_string, "r");    
         
         // check file
         if (input_file == 0) {
@@ -484,7 +275,7 @@ int main(int argc, char * argv[])   {
                 ocm[(chunks - 1)*16 + 15] = size;
         }
 
-    } else if (mode == TESTBENCH) {
+    } else if (state.mode == TESTBENCH) {
         /* // key */
         /* ocm[0] = 0x603deb10; */
         /* ocm[1] = 0x15ca71be; */
@@ -643,7 +434,7 @@ int main(int argc, char * argv[])   {
                 
                 // Calculate in sw and see time
                 int diff = 1;
-                if(mode == TESTBENCH) {
+                if(state.mode == TESTBENCH) {
                         // time setup
                         struct timeval first, last;
                         gettimeofday(&first, 0);
