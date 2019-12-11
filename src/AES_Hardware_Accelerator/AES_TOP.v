@@ -199,7 +199,7 @@ module AES_TOP(
         aes_complete <= 1'b1;
       end else if((STATE == AES_WRITE3) && (write_reg_num[3:0] != 4'b0011)) begin
         write_reg_num_nxt <= write_reg_num + 4'b0001;
-        aes_bram_addr <= aes_bram_write_addr_nxt + 32'h4;
+        aes_bram_addr <= aes_bram_addr_nxt + 32'h4;
         aes_start_write <= 1'b1;
         NXT_STATE <= AES_WRITE1;
 			end
