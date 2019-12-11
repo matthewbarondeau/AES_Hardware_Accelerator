@@ -159,7 +159,7 @@ module AES_TOP(
       end else if((STATE == WAIT_AES3) && (aes_idle == 1'b0)) begin
         NXT_STATE <= WAIT_AES3;
       end else if((STATE == WAIT_AES3) && (aes_idle == 1'b1)) begin
-        NXT_STATE <= INIT;
+        NXT_STATE <= AES_WRITE1;
 			  //aes_complete <= 1'b1;
         aes_result_reg <= aes_result;
       end else if(STATE == AES_WRITE1) begin
