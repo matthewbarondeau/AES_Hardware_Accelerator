@@ -12,10 +12,10 @@
 #undef DEBUG1
 #undef DEBUG2
 #undef DEBUG_BRAM
-#define DEBUG                    // Comment out to turn off debug messages
-/* #define DEBUG1                // Comment out to turn off debug messages */
-//#define DEBUG2
-//#define DEBUG_BRAM
+#define DEBUG            // Comment out to turn off debug messages
+/* #define DEBUG1           // Comment out to turn off debug messages */
+/* #define DEBUG2 */
+/* #define DEBUG_BRAM */
 
 // ******************************************************************** 
 // Memomoy Map
@@ -27,9 +27,9 @@
 
 // ******************************************************************** 
 // Modes
-#define STRING 		    1
-#define FILE_MODE	    2
-#define TESTBENCH           3
+/* #define STRING 		    1 */
+/* #define FILE_MODE	    2 */
+/* #define TESTBENCH           3 */
 
 // ******************************************************************** 
 // Regs for CDMA
@@ -44,6 +44,7 @@
 #define DA                  0x20
 #define DA_MSB              0x24
 #define BTT                 0x28
+#define TRANSFER_SIZE(size) (size<<4)
 
 // ******************************************************************** 
 // Regs for Acclerator
@@ -55,25 +56,46 @@
 // ******************************************************************** 
 // Device path name for the GPIO device
 
-#define GPIO_TIMER_EN_NUM   0x7             // Set bit 7 to enable timere             
+#define GPIO_TIMER_EN_NUM   0x7             // Set bit 7 to enable timer
 #define GPIO_TIMER_CR       0x43C00000      // Control register
 #define GPIO_LED_NUM        0x7
 #define GPIO_LED            0x43C00004      // LED register
 #define GPIO_TIMER_VALUE    0x43C0000C      // Timer value
 
 // Global vars
-static volatile unsigned int det_int=0;     // Global flag that is volatile 
+/* static volatile unsigned int det_int=0;     // Global flag that is volatile */ 
                                             // i.e., no caching
 
 // ***************  Struct for keeping state of program ******************
 //
 
+typedef enum program_mode {
+        STRING,
+        FILE_MODE,
+        TESTBENCH
+} pmode;
+
 typedef struct program_state {
-        char*   aes_string;
-        char*   key_string;
-        int     mode;
+        char*           aes_string;
+        char*           key_string;
+        pmode           mode;
+        uint32_t        chunks;
+        uint32_t        timer_value;
+        uint32_t*       cdma_addr;
+        uint32_t*       bram_addr;
+        uint32_t*       acc_addr;
+        uint32_t*       ocm_addr;
 } pstate;
 
+// ***************  Struct for AES transaction  ******************
+//
+
+typedef struct aes_transaction {
+        uint32_t*       key;
+        uint32_t*       data;
+        uint32_t*       writeback_bram_addr;
+        uint32_t        bram_addr;
+} aes_t;
 
 // ************************  FUNCTION PROTOTYPES ***********************
 //       
@@ -91,20 +113,35 @@ unsigned int address_set(unsigned int* virtual_address, int offset, unsigned int
 unsigned int dma_get(unsigned int* dma_virtual_address, int offset);
 // Poll cdma to wait for transaction to finish
 int cdma_sync(unsigned int* dma_virtual_address);
+// Gettter for det_int flag
+unsigned int get_det_int();
 // Signal handler for interrupt
 void sighandler(int signo);
 
+// ******************  Init/Gerneral Helper Functions ******************
 // Init state from program args
 void init_state(int argc, char* argv[], pstate* state);
-
+// Setup interrupt (interrupt handler)
+void interrupt_setup(struct sigaction* pAction);
+// Setup Memory Mapped I/)
+void mm_setup(pstate* state);
+// Setup String mode memory
+void string_setup(pstate* state, aes_t* transaction);
+// Setup File mode memory
+void file_setup(pstate* state, aes_t* transaction);
+// Setup Testbench memory
+void testbench_setup(aes_t* transaction);
 // For printing AES values
-// Encrypt buffer (128 bits) goes to encrypt
-// aes string is returned to be printed
-// endian switch to 1 to change endianess
 void print_aes(char *aes, uint32_t *encrypt, int endian_switch);
+// Test SW time
+int software_time(char* aes_out, const unsigned char* key, unsigned char* text);
+// Check sw and hw values
+void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state, int diff);
+// CDMA transfer
+void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size);
 
 // ************************  Functions for latency testing
-unsigned long int_sqrt(unsigned long n);
+/* unsigned long int_sqrt(unsigned long n); */
 /* void compute_interrupt_latency_stats( unsigned long   *min_latency_p, */ 
 /*                                       unsigned long   *max_latency_p, */ 
 /*                                       unsigned long   *average_latency_p, */ 
