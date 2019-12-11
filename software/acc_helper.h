@@ -62,7 +62,7 @@
 #define GPIO_TIMER_VALUE    0x43C0000C      // Timer value
 
 // Global vars
-static volatile unsigned int det_int=0;     // Global flag that is volatile 
+/* static volatile unsigned int det_int=0;     // Global flag that is volatile */ 
                                             // i.e., no caching
 
 // ***************  Struct for keeping state of program ******************
@@ -78,6 +78,7 @@ typedef struct program_state {
         char*           aes_string;
         char*           key_string;
         pmode           mode;
+        uint32_t        chunks;
         uint32_t*       cdma_addr;
         uint32_t*       bram_addr;
         uint32_t*       acc_addr;
@@ -101,6 +102,8 @@ unsigned int address_set(unsigned int* virtual_address, int offset, unsigned int
 unsigned int dma_get(unsigned int* dma_virtual_address, int offset);
 // Poll cdma to wait for transaction to finish
 int cdma_sync(unsigned int* dma_virtual_address);
+// Gettter for det_int flag
+unsigned int get_det_int();
 // Signal handler for interrupt
 void sighandler(int signo);
 
@@ -111,6 +114,9 @@ void init_state(int argc, char* argv[], pstate* state);
 void interrupt_setup(struct sigaction* pAction);
 // Setup Memory Mapped I/)
 void mm_setup(pstate* state);
+// Setup String mode memory
+void string_setup(pstate* state, uint32_t* key, uint32_t* data,
+                uint32_t* writeback_bram_addr, uint32_t bram_addr);
 // Setup Testbench memory
 void testbench_setup(uint32_t* key, uint32_t* chunk, uint32_t* writeback_bram_addr,
                      uint32_t bram_addr);
@@ -121,7 +127,7 @@ int software_time(char* aes_out, const unsigned char* key, unsigned char* text);
 // Check sw and hw values
 void compare_aes_values(char* hw_aes, char* sw_aes);
 // CDMA transfer
-void cmda_transfer(unsigned int* dest, unsigned int* src, int size);
+void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size);
 
 // ************************  Functions for latency testing
 unsigned long int_sqrt(unsigned long n);

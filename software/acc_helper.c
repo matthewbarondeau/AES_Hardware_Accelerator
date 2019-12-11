@@ -209,7 +209,14 @@ int cdma_sync(unsigned int* dma_virtual_address) {
 // *************************  SIGHANDLER  ********************************
 //  This routine does the interrupt handling for the main loop.
 //
+static volatile unsigned int det_int=0;     // Global flag that is volatile
 
+// getter for flag
+unsigned int get_det_int()
+{
+        return det_int;
+}
+// interrupt handler (increments flag)
 void sighandler(int signo)
 {
     if (signo==SIGIO)
@@ -338,6 +345,48 @@ void mm_setup(pstate* state)
 
 }  
 
+// *************************  String setup ***************************
+// Set key and chunk data to correct value
+// Assumes key and data values are ascii not hex (ie 'a' is 0x61, not 0x0A)
+
+void string_setup(pstate* state, uint32_t* key, uint32_t* data, uint32_t* writeback_bram_addr,
+                  uint32_t bram_addr)
+{
+    int size;
+    char buffer[CHUNK_SIZE] = {0}; // 1 chunk
+
+    // Key
+    assert(strlen(state->key_string) == 32); // make sure key is 256 bits 
+
+    // put key in key buffer
+    char *pEnd = (char*)state->key_string;
+    pEnd += 4;
+    key[0] = (uint32_t)strtol(state->key_string, &pEnd, 16); // big endian
+    /* ocm[0] = (uint32_t)key_string[0]; */
+    for(int i = 1; i < 8; i++){
+        pEnd+=4;
+        key[i] = (uint32_t)strtol(pEnd, &pEnd, 16); // big endian
+        /* ocm[i] = htobe32(((uint32_t*)key_string)[i]); */ 
+    }
+
+    // Data
+    printf("Put string in ocm\n");
+    size = strlen(state->aes_string); // aes_string in bytes
+    if(size < CHUNK_SIZE + 1) { // null terminator
+        for (int i = 0; i < size; i++) {
+            buffer[i] = state->aes_string[i];
+        }
+    } else {
+        printf("Does not support more than 1 chunk rn :(\n");
+        exit(-1);
+    }
+    // Write chunk to ocm for cdma
+    for(int i=0; i<4; i++)  {
+        data[i] = htobe32(((uint32_t*)buffer)[i]); 
+    }
+
+}
+
 // *************************  Testbench setup ***************************
 // Set key and chunk data to correct value 
 
@@ -453,11 +502,14 @@ void init_state(int argc, char* argv[], pstate* state)
 	
 }
 
-// *************************  print_aes ******************************
-// Puts hex from encrypt array into aes as a string for printing
-void cmda_transfer(unsigned int* dest, unsigned int* src, int size)
+// *************************  CDMA Transfer ******************************
+// Does cmda transfer from dest to src for size number of bytes
+void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size)
 {
-        return;
+     address_set(state->cdma_addr, DA, dest); // Write destination address
+     address_set(state->cdma_addr, SA, src);   // Write source address
+     address_set(state->cdma_addr, BTT, size); // Start transfer
+     cdma_sync(state->cdma_addr);
 }
 
 // *************************  COMPUTE INT LATENCY ***************************
