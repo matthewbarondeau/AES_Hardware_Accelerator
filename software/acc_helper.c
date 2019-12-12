@@ -75,19 +75,13 @@ int smb(unsigned int target_addr, unsigned int pin_number,
 #endif 
    
     /* Read register value to modify */
-    
     reg_data = *address;
-    
     if (bit_val == 0) {
-        
         // Deassert output pin in the target port's DR register
-        
         reg_data &= ~ONE_BIT_MASK(pin_number);
         *address = reg_data;
     } else {
-        
         // Assert output pin in the target port's DR register
-                
         reg_data |= ONE_BIT_MASK(pin_number);
         *address = reg_data;
     }
@@ -101,7 +95,6 @@ int smb(unsigned int target_addr, unsigned int pin_number,
 
     munmap(NULL, MAP_SIZE);        
     return 0;
-   
 }    // End of smb routine
 
 
@@ -109,36 +102,36 @@ int smb(unsigned int target_addr, unsigned int pin_number,
 //
 unsigned int rm( unsigned int target_addr) 
 {
-	int fd = open("/dev/mem", O_RDWR|O_SYNC);
-	volatile unsigned int *regs, *address ;
-	
-	if(fd == -1)
-	{
-		perror("Unable to open /dev/mem.  Ensure it exists (major=1, minor=1)\n");
-		return -1;
-	}	
-		
-	regs = (unsigned int *)mmap(NULL, 
-	                            MAP_SIZE, 
-	                            PROT_READ|PROT_WRITE, 
-	                            MAP_SHARED, 
-	                            fd, 
-	                            target_addr & ~MAP_MASK);		
+    int fd = open("/dev/mem", O_RDWR|O_SYNC);
+    volatile unsigned int *regs, *address ;
+        
+    if(fd == -1)
+    {
+        perror("Unable to open /dev/mem.  Ensure it exists (major=1, minor=1)\n");
+        return -1;
+    }       
+                
+    regs = (unsigned int *)mmap(NULL, 
+                                MAP_SIZE, 
+                                PROT_READ|PROT_WRITE, 
+                                MAP_SHARED, 
+                                fd, 
+                                target_addr & ~MAP_MASK);           
 
-    address = regs + (((target_addr) & MAP_MASK)>>2);    	
+    address = regs + (((target_addr) & MAP_MASK)>>2);           
     //printf("Timer register = 0x%.8x\n", *address);
-    
-	unsigned int rxdata = *address;         // Perform read of SPI 
-            	
-	int temp = close(fd);                   // Close memory
-	if(temp == -1)
-	{
-		perror("Unable to close /dev/mem.  Ensure it exists (major=1, minor=1)\n");
-		return -1;
-	}	
+ 
+    unsigned int rxdata = *address;         // Perform read of SPI 
+                
+    int temp = close(fd);                   // Close memory
+    if(temp == -1)
+    {
+        perror("Unable to close /dev/mem.  Ensure it exists (major=1, minor=1)\n");
+        return -1;
+    }       
 
-	munmap(NULL, MAP_SIZE);                 // Unmap memory
-	return rxdata;                          // Return data from read
+    munmap(NULL, MAP_SIZE);                 // Unmap memory
+    return rxdata;                          // Return data from read
 
 }   // End of em routine
 
@@ -148,35 +141,35 @@ unsigned int rm( unsigned int target_addr)
 
 int pm( unsigned int target_addr, unsigned int value ) 
 {
-	int fd = open("/dev/mem", O_RDWR|O_SYNC);
-	volatile unsigned int *regs, *address ;
-	
-	if(fd == -1)
-	{
-		perror("Unable to open /dev/mem.  Ensure it exists (major=1, minor=1)\n");		
-		return -1;
-	}	
-		
-	regs = (unsigned int *)mmap(NULL, 
-	                            MAP_SIZE, 
-	                            PROT_READ|PROT_WRITE, 
-	                            MAP_SHARED, 
-	                            fd, 
-	                            target_addr & ~MAP_MASK);		
+    int fd = open("/dev/mem", O_RDWR|O_SYNC);
+    volatile unsigned int *regs, *address ;
+        
+    if(fd == -1)
+    {
+        perror("Unable to open /dev/mem.  Ensure it exists (major=1, minor=1)\n");
+        return -1;
+    }       
+                
+    regs = (unsigned int *)mmap(NULL, 
+                                MAP_SIZE, 
+                                PROT_READ|PROT_WRITE, 
+                                MAP_SHARED, 
+                                fd, 
+                                target_addr & ~MAP_MASK);           
 
-    address = regs + (((target_addr) & MAP_MASK)>>2);    	
+    address = regs + (((target_addr) & MAP_MASK)>>2);           
 
-	*address = value; 	                    // Perform write command
-        	
-	int temp = close(fd);                   // Close memory
-	if(temp == -1)
-	{
-		perror("Unable to close /dev/mem.  Ensure it exists (major=1, minor=1)\n");
-		return -1;
-	}	
+    *address = value;                           // Perform write              
 
-	munmap(NULL, MAP_SIZE);                 // Unmap memory
-	return 0;                               // Return status
+    int temp = close(fd);                   // Close memory
+    if(temp == -1)
+    {
+        perror("Unable to close /dev/mem.  Ensure it exists (major=1, minor=1)\n");
+        return -1;
+    }       
+
+    munmap(NULL, MAP_SIZE);                 // Unmap memory
+    return 0;                               // Return status
 
 }   // End of pm routine
 
@@ -234,51 +227,48 @@ void sighandler(int signo)
 //
 void interrupt_setup(struct sigaction* pAction)
 {
-    // Setup signal handler
+    // Setup signal SIGIO to call sighandler()
     sigemptyset(&(pAction->sa_mask));
     sigaddset(&(pAction->sa_mask), SIGIO);
-    
     pAction->sa_handler = sighandler;
     pAction->sa_flags = 0;
-
     sigaction(SIGIO, pAction, NULL);
 
 
+    int fd, fc, rc;                     // File descriptor
 
-    int fd;                     // File descriptor
-    int fc;
-    int rc;
-
+    // Open interrupt as file descriptor
     fd = open("/dev/acc_int", O_RDWR);
     if (fd == -1) {
-    	perror("Unable to open /dev/acc_interrupt");
-    	rc = fd;
-    	exit (-1);
+        perror("Unable to open /dev/acc_interrupt");
+        rc = fd;
+        exit (-1);
     }
     
     #ifdef DEBUG1
-        printf("/dev/dma_int opened successfully \n");    	
+        printf("/dev/dma_int opened successfully \n");          
     #endif
     
+    // Set the interrupt to own this pid
     fc = fcntl(fd, F_SETOWN, getpid());
     
     #ifdef DEBUG1
         printf("Made it through fcntl\n");
     #endif
     
-        
     if (fc == -1) {
-    	perror("SETOWN failed\n");
-    	rc = fd;
-    	exit (-1);
+        perror("SETOWN failed\n");
+        rc = fd;
+        exit (-1);
     } 
     
+    // Set the interrupt to send SIGIO
     fc= fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_ASYNC);
 
     if (fc == -1) {
-    	perror("SETFL failed\n");
-    	rc = fd;
-    	exit (-1);
+        perror("SETFL failed\n");
+        rc = fd;
+        exit (-1);
     }
 }
 
@@ -291,12 +281,12 @@ void mm_setup(pstate* state)
     int dh = open("/dev/mem", O_RDWR | O_SYNC); 
     
     if(dh == -1) {
-	printf("Unable to open /dev/mem.  \
+        printf("Unable to open /dev/mem.  \
                 Ensure it exists (major=1, minor=1)\n");
-	printf("Must be root to run this routine.\n");
-	exit(-1);
+        printf("Must be root to run this routine.\n");
+        exit(-1);
     }
-	                                          
+                                                  
     // Open CMDA Address  
     #ifdef DEBUG1                                     
         printf("Getting ready to mmap cdma_virtual_address \n");    
@@ -351,7 +341,6 @@ void mm_setup(pstate* state)
 
 void string_setup(pstate* state, aes_t* transaction)
 {
-    char buffer[CHUNK_SIZE] = {0}; // 1 chunk
 
     // Key
     assert(strlen(state->key_string) == 32); // 32*8= 256 bits 
@@ -366,9 +355,23 @@ void string_setup(pstate* state, aes_t* transaction)
         printf("Put string in data buffer\n");
     #endif
     int size = strlen(state->aes_string); // aes_string in bytes
+    char buffer[CHUNK_SIZE] = {0}; // 1 chunk can probably to straight to ocm
+    // If size is less than 1 chunk
     if(size < CHUNK_SIZE + 1) { 
         for (int i = 0; i < size; i++) {
             buffer[i] = state->aes_string[i];
+            #ifdef DEBUG
+                printf("Buffer[%d]: %x\n", i, buffer[i]);
+            #endif
+        }
+
+        // pading using PKCS7
+        int number_of_zeroes = CHUNK_SIZE - size;
+        for(int i = size; i < CHUNK_SIZE; i++) {
+            buffer[i] = (char)number_of_zeroes;
+            #ifdef DEBUG
+                printf("Buffer[%d]: %x\n", i, buffer[i]);
+            #endif
         }
     } else {
         printf("Size: %d\n", size);
@@ -389,45 +392,45 @@ void string_setup(pstate* state, aes_t* transaction)
 // Setup File mode memory
 void file_setup(pstate* state, aes_t* transaction)
 {
-        // open file
-        FILE* input_file = fopen(state->aes_string, "r");    
-        
-        char buffer[CHUNK_SIZE] = {0}; // 1 chunk
-        // just doing 1 chunk for now
-        
-        // check file
-        if (input_file == 0) {
-                printf("Unable to open\n");
-                exit(-1);
-        } else { 
-                // Need to get key input
-               
-                // read file
-                #ifdef DEBUG
-                    printf("Reading input file\n");
-                #endif
-                int index = 0;
-                int c;
-                while ((c = fgetc(input_file)) != EOF) {
-                        buffer[index] = c;
-                        ++index;
-                }
-                fclose(input_file);
+    // open file
+    FILE* input_file = fopen(state->aes_string, "r");    
 
-                // figure out size
-                int size = index << 3; // in bits
-                state->chunks = size/CHUNK_SIZE;
-                /* if(size % 512 != 0) */
-                        state->chunks++;
-                /* printf("chunks: %d, size: %d\n", chunks, size); */
-                // Write chunk to buffer for cdma
-                for(int i=0; i<state->chunks*4; i++)  { // 4 32 bit words in a chunk
-                        transaction->data[i] = htobe32(((uint32_t*)buffer)[i]);
-                }
-                #ifdef DEBUG
-                    printf("finished writing\n");
-                #endif
-        }
+    char buffer[CHUNK_SIZE] = {0}; // 1 chunk
+    // just doing 1 chunk for now
+    
+    // check file
+    if (input_file == 0) {
+        printf("Unable to open\n");
+        exit(-1);
+    } else { 
+         // Need to get key input
+               
+         // read file
+         #ifdef DEBUG
+             printf("Reading input file\n");
+         #endif
+         int index = 0;
+         int c;
+         while ((c = fgetc(input_file)) != EOF) {
+             buffer[index] = c;
+             ++index;
+         }
+         fclose(input_file);
+
+         // figure out size
+         int size = index << 3; // in bits
+         state->chunks = size/CHUNK_SIZE;
+         /* if(size % 512 != 0) */
+             state->chunks++;
+         /* printf("chunks: %d, size: %d\n", chunks, size); */
+         // Write chunk to buffer for cdma
+         for(int i=0; i<state->chunks*4; i++)  { // 4 32 bit words in a chunk
+             transaction->data[i] = htobe32(((uint32_t*)buffer)[i]);
+         }
+         #ifdef DEBUG
+             printf("finished writing\n");
+         #endif
+    }
 }
 
 
@@ -463,22 +466,23 @@ void testbench_setup(aes_t* transaction)
 // Assumes that aes is 33 bytes (32 bytes for each hex + null)
 
 void print_aes(char *aes, uint32_t *encrypt, int endian_switch) {
-        char tstr[20];
-        for(int index = 0; index < 4; index++) {
-                if(endian_switch)
-                        sprintf(tstr, "%.8x", be32toh(encrypt[index]));
-                else
-                        sprintf(tstr, "%.8x", encrypt[index]);
-                strcat(aes, tstr);
+    char tstr[20];
+    for(int index = 0; index < 4; index++) {
+        if(endian_switch) {
+            sprintf(tstr, "%.8x", be32toh(encrypt[index]));
+        } else {
+            sprintf(tstr, "%.8x", encrypt[index]);
         }
-        /* aes[32] = '\0'; */
+        strcat(aes, tstr);
+    }
 }
 
 
 // *************************  AES Software ***************************
 // Does AES in software with key and text
 // Returns time, puts data out in aes_out
-int software_time(char* aes_out, const unsigned char* key, unsigned char* text)
+
+int software_time(char* aes_out, pstate* state)
 {
     // time setup
     struct timeval first, last;
@@ -487,9 +491,7 @@ int software_time(char* aes_out, const unsigned char* key, unsigned char* text)
 
     // Encrypt in software
     char enc_out[80];
-    AES_KEY enc_key;
-    AES_set_encrypt_key(key, 256, &enc_key);
-    AES_ecb_encrypt(text, enc_out, &enc_key, 1);
+    encrypt_string(enc_out, state);
 
     // time again
     gettimeofday(&last, 0);
@@ -502,6 +504,14 @@ int software_time(char* aes_out, const unsigned char* key, unsigned char* text)
     printf("SW aes is: %s\n", aes_out);
     printf("Time SW = %d ns\n", diff);
 
+}
+
+// encrypt text
+void encrypt_string(unsigned char* encrypt_out, pstate* state)
+{
+    AES_KEY enc_key;
+    AES_set_encrypt_key(state->key_string, 256, &enc_key);
+    AES_ecb_encrypt(state->aes_string, encrypt_out, &enc_key, 1);
 }
 
 // Compare 2 AES values
@@ -518,7 +528,7 @@ void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state,
             printf("SW and HW AES values the same :)\n");
     }
     
-    int hw_nsecs = state->timer_value*13; // 75Mhz = 13,333 us per 
+    int hw_nsecs = state->timer_value*10; // 100Mhz = 10 ns per 
     int sw_nsecs = diff;
     printf("Time HW =  %d ns\n", state->timer_value*13);
     printf("Speedup: %d\n", sw_nsecs/hw_nsecs);
@@ -533,29 +543,29 @@ void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state,
 void init_state(int argc, char* argv[], pstate* state)
 {
     if (argc < 4 && (strcmp(argv[1], "-tb") != 0)) {
-		printf("Wrong number of args for program \n");
-		exit(-1);
-	}
-	
+        printf("Wrong number of args for program \n");
+        exit(-1);
+    }
+        
     if (strcmp(argv[1], "-s") == 0) {
-	state->mode = STRING;
+        state->mode = STRING;
         state->aes_string = argv[2];
         state->key_string = argv[3];
-	printf("String mode, using string \"%s\" \n", state->aes_string);
+        printf("String mode, using string \"%s\" \n", state->aes_string);
     }
     else if (strcmp(argv[1], "-f") == 0) {
-	/* printf("File mode \n"); */
-	state->mode = FILE_MODE;
+        /* printf("File mode \n"); */
+        state->mode = FILE_MODE;
         state->aes_string = argv[2];
     } else if (strcmp(argv[1], "-tb") == 0) {
         // testbench mode, ie inputs from secwork testbench
         state->mode = TESTBENCH;
     }
     else {
-	printf("No mode specifier\n");
-	exit(-1);
+        printf("No mode specifier\n");
+        exit(-1);
     }
-	
+        
 }
 
 // *************************  CDMA Transfer ******************************
@@ -573,11 +583,11 @@ void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size)
 //
 /* unsigned long int_sqrt(unsigned long n) */
 /* { */
-/* 	for(unsigned int i = 1; i < n; i++) */
-/* 	{ */
-/* 		if(i*i > n) */
-/* 			return i - 1; */
-/* 	} */
+/*      for(unsigned int i = 1; i < n; i++) */
+/*      { */
+/*              if(i*i > n) */
+/*                      return i - 1; */
+/*      } */
 /* } */
 
 /* void compute_interrupt_latency_stats( unsigned long   *min_latency_p, */ 
@@ -587,36 +597,36 @@ void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size)
 /*                                       unsigned long   *intr_latency_measurements; */
 /*                                       unsigned int     lp_cnt) */
 /* { */
-/* 	int number_of_ones = 0; */
-/* 	*min_latency_p = INT_MAX; */
-/* 	*max_latency_p = 0; */
-/* 	unsigned long sum = 0; */
-/* 	for(unsigned int index = 0;index < lp_cnt;index++) */
-/* 	{ */
-/* 		if(intr_latency_measurements[index] < *min_latency_p) */
-/* 			*min_latency_p = intr_latency_measurements[index]; */
-/* 		if(intr_latency_measurements[index] > *max_latency_p) */
-/* 			*max_latency_p = intr_latency_measurements[index]; */
-/* 		if(intr_latency_measurements[index] == 1) */
-/* 			number_of_ones++; */
-/* 		sum += intr_latency_measurements[index]; */
+/*      int number_of_ones = 0; */
+/*      *min_latency_p = INT_MAX; */
+/*      *max_latency_p = 0; */
+/*      unsigned long sum = 0; */
+/*      for(unsigned int index = 0;index < lp_cnt;index++) */
+/*      { */
+/*              if(intr_latency_measurements[index] < *min_latency_p) */
+/*                      *min_latency_p = intr_latency_measurements[index]; */
+/*              if(intr_latency_measurements[index] > *max_latency_p) */
+/*                      *max_latency_p = intr_latency_measurements[index]; */
+/*              if(intr_latency_measurements[index] == 1) */
+/*                      number_of_ones++; */
+/*              sum += intr_latency_measurements[index]; */
                 
 /*                 #ifdef DEBUG */
 /*                         printf("DEBUG: Number of ones: %ld\n", */ 
 /*                                intr_latency_measurements[index]); */
 /*                 #endif */
-/* 	} */
-/* 	*average_latency_p = sum / lp_cnt; */
+/*      } */
+/*      *average_latency_p = sum / lp_cnt; */
 
-/* 	//Standard Deviation */
-/* 	sum = 0; */
-/* 	for(int index = 0;index < lp_cnt;index++) */
-/* 	{ */
-/* 		int temp = intr_latency_measurements[index] - */ 
+/*      //Standard Deviation */
+/*      sum = 0; */
+/*      for(int index = 0;index < lp_cnt;index++) */
+/*      { */
+/*              int temp = intr_latency_measurements[index] - */ 
 /*                            *average_latency_p; */
-/* 		sum += temp*temp; */
-/* 	} */
-/* 	*std_deviation_p = int_sqrt(sum/lp_cnt); */
+/*              sum += temp*temp; */
+/*      } */
+/*      *std_deviation_p = int_sqrt(sum/lp_cnt); */
 /* } */
    
 /*
@@ -647,18 +657,28 @@ void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size)
             average_latency, 
             std_deviation);
      // Get interrupt number usage from /proc/interrupts
-	char * buf = NULL;
-	FILE *fp = fopen("/proc/interrupts", "r");
-	int len;
-	while(getline(&buf, &len, fp) != -1) {
-		if (buf[1] == '4' && buf[2] == '6') {
-			printf("%s", buf);
-			break;
-		}
-	}
-	fclose(fp);
+        char * buf = NULL;
+        FILE *fp = fopen("/proc/interrupts", "r");
+        int len;
+        while(getline(&buf, &len, fp) != -1) {
+                if (buf[1] == '4' && buf[2] == '6') {
+                        printf("%s", buf);
+                        break;
+                }
+        }
+        fclose(fp);
 */
 // SIGHANDLER Var
 /* volatile unsigned int  data_cnt; */ 
 //  Array of interrupt latency measurements
 /* unsigned long intr_latency_measurements[3000]; */
+// ************************  Functions for latency testing
+/* unsigned long int_sqrt(unsigned long n); */
+/* void compute_interrupt_latency_stats( unsigned long   *min_latency_p, */ 
+/*                                       unsigned long   *max_latency_p, */ 
+/*                                       unsigned long   *average_latency_p, */ 
+/*                                       unsigned long   *std_deviation_p, */
+/*                                       unsigned long   *intr_latency_measurements; */
+/*                                       unsigned int    lp_cnt); */ 
+
+

@@ -26,12 +26,6 @@
 #define OCM                 0xFFFC0000
 
 // ******************************************************************** 
-// Modes
-/* #define STRING 		    1 */
-/* #define FILE_MODE	    2 */
-/* #define TESTBENCH           3 */
-
-// ******************************************************************** 
 // Regs for CDMA
 #define CDMACR              0x00
 #define CDMASR              0x04
@@ -61,10 +55,6 @@
 #define GPIO_LED_NUM        0x7
 #define GPIO_LED            0x43C00004      // LED register
 #define GPIO_TIMER_VALUE    0x43C0000C      // Timer value
-
-// Global vars
-/* static volatile unsigned int det_int=0;     // Global flag that is volatile */ 
-                                            // i.e., no caching
 
 // ***************  Struct for keeping state of program ******************
 //
@@ -134,19 +124,12 @@ void testbench_setup(aes_t* transaction);
 // For printing AES values
 void print_aes(char *aes, uint32_t *encrypt, int endian_switch);
 // Test SW time
-int software_time(char* aes_out, const unsigned char* key, unsigned char* text);
+int software_time(char* aes_out, pstate* state);
+// Encrypt string (ecb mode, sw)
+void encrypt_string(unsigned char* encrypt_out, pstate* state);
 // Check sw and hw values
 void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state, int diff);
 // CDMA transfer
 void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size);
-
-// ************************  Functions for latency testing
-/* unsigned long int_sqrt(unsigned long n); */
-/* void compute_interrupt_latency_stats( unsigned long   *min_latency_p, */ 
-/*                                       unsigned long   *max_latency_p, */ 
-/*                                       unsigned long   *average_latency_p, */ 
-/*                                       unsigned long   *std_deviation_p, */
-/*                                       unsigned long   *intr_latency_measurements; */
-/*                                       unsigned int    lp_cnt); */ 
 
 

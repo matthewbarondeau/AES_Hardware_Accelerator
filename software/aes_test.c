@@ -99,6 +99,9 @@ int main(int argc, char * argv[])   {
         // Setup testbench data
         testbench_setup(&transaction);
 
+        // Setup state
+        state.key_string = (unsigned char*)key;
+        state.aes_string = text_openssl;
     } else {
         printf("Idk how you got here\n");
         return -1;
@@ -183,8 +186,7 @@ int main(int argc, char * argv[])   {
             // do cmda read back
             cdma_transfer(&state,
                           (OCM + TRANSFER_SIZE(state.chunks)),  // Dest is ocm
-                          BRAM1 + 4,
-                          /* (BRAM1 + TRANSFER_SIZE(state.chunks)),// Source is BRAM */
+                          (BRAM1 + TRANSFER_SIZE(state.chunks)),// Source is BRAM
                           TRANSFER_SIZE(state.chunks));
                
             /* #ifdef DEBUG */
@@ -200,11 +202,11 @@ int main(int argc, char * argv[])   {
             // Calculate in sw and see time
             if(state.mode == STRING) {
                 char sw_aes[80] = {0};
-                int diff = software_time(sw_aes, state.key_string, state.aes_string);
+                int diff = software_time(sw_aes, &state);
             } else if(state.mode == TESTBENCH) {
                 char sw_aes[80] = {0};
                 // diff is in us
-                int diff = software_time(sw_aes, key, text_openssl);
+                int diff = software_time(sw_aes, &state);
                 compare_aes_values(aes, sw_aes, &state, diff);
             }
 
@@ -220,8 +222,8 @@ int main(int argc, char * argv[])   {
 
     else  // fork failed
     {
-           perror("Fork failed");
-           exit(0);
+        perror("Fork failed");
+        exit(0);
     } // if childpid >=0
     
     // **************** UNMAP all open Memory Blocks *******************
