@@ -69,6 +69,8 @@ typedef struct program_state {
         char*           aes_string;
         char*           key_string;
         pmode           mode;
+        uint32_t        silent;
+        uint32_t        verbose;
         uint32_t        chunks;
         uint32_t        timer_value;
         uint32_t*       cdma_addr;

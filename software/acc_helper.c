@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <argp.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <termios.h>
@@ -222,6 +223,97 @@ void sighandler(int signo)
 
 }
 
+// *************************  Init State ******************************
+// Puts state of program into pstate based on cmd args
+
+// stuff for argp
+const char *argp_program_version =
+  "aes-test 0.2";
+
+/* Program documentation. */
+static char doc[] =
+    "AES Test -- a program that does AES Encryption with HW acceleration";
+
+/* A description of the arguments we accept. */
+static char args_doc[] = "DATA KEY";
+
+/* The options we understand. */
+static struct argp_option options[] = {
+  {"verbose",  'v', 0,      0,  "Produce verbose output" },
+  {"quiet",    'q', 0,      0,  "Don't produce any output" },
+  {"string",   's', 0,      0,  "Use string as key and data input" },
+  {"testbench",'t', 0, 	    0,  "Use testbench inputs"},
+  {"output",   'o', "FILE", 0,
+   "Output to FILE instead of standard output" },
+  { 0 }
+};
+
+/* Parse a single option. */
+static error_t
+parse_opt (int key, char *arg, struct argp_state *state)
+{
+  /* Get the input argument from argp_parse, which we
+     know is a pointer to our arguments structure. */
+  pstate* ps = state->input;
+
+  switch (key)
+    {
+    case 'q': 
+        ps->silent = 1;
+        break;
+    case 'v':
+        ps->verbose = 1;
+      break;
+    case 's':
+	ps->mode = STRING;
+        break;
+    case 't':
+	ps->mode = TESTBENCH;
+        break;
+    case 'o':
+	/*   arguments->output_file = arg; */
+	/* printf("Ouput file %s\n", arg); */
+        break;
+
+    case ARGP_KEY_ARG:
+        if (state->arg_num >= 2)
+            /* Too many arguments. */
+            argp_usage (state);
+
+	if(state->arg_num == 0)
+            ps->aes_string = arg;
+	else
+            ps->key_string = arg;
+
+        break;
+
+    case ARGP_KEY_END:
+	// Do nothing, no minimum number of args
+        break;
+
+    default:
+          return ARGP_ERR_UNKNOWN;
+    }
+  return 0;
+}
+
+/* Our argp parser. */
+static struct argp argp = { options, parse_opt, args_doc, doc };
+
+void init_state(int argc, char* argv[], pstate* state)
+{
+
+    /* Default values. */
+    state->silent = 0;
+    state->verbose = 0;
+    /* arguments.output_file = "-"; */
+
+    /* Parse our arguments; every option seen by parse_opt will
+     be reflected in arguments. */
+    argp_parse (&argp, argc, argv, 0, 0, state);	
+
+}
+
 // *************************  Interrupt setup ****************************
 // Sets up sighandler for interrupt 
 //
@@ -361,7 +453,8 @@ void string_setup(pstate* state, aes_t* transaction)
         for (int i = 0; i < size; i++) {
             buffer[i] = state->aes_string[i];
             #ifdef DEBUG
-                printf("Buffer[%d]: %x\n", i, buffer[i]);
+		if(state->verbose)
+		    printf("Buffer[%d]: %x\n", i, buffer[i]);
             #endif
         }
 
@@ -370,7 +463,8 @@ void string_setup(pstate* state, aes_t* transaction)
         for(int i = size; i < CHUNK_SIZE; i++) {
             buffer[i] = (char)number_of_zeroes;
             #ifdef DEBUG
-                printf("Buffer[%d]: %x\n", i, buffer[i]);
+		if(state->verbose)
+		    printf("Buffer[%d]: %x\n", i, buffer[i]);
             #endif
         }
     } else {
@@ -537,36 +631,6 @@ void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state,
 
 }
 
-// *************************  Init State ******************************
-// Puts state of program into pstate based on cmd args
-
-void init_state(int argc, char* argv[], pstate* state)
-{
-    if (argc < 4 && (strcmp(argv[1], "-tb") != 0)) {
-        printf("Wrong number of args for program \n");
-        exit(-1);
-    }
-        
-    if (strcmp(argv[1], "-s") == 0) {
-        state->mode = STRING;
-        state->aes_string = argv[2];
-        state->key_string = argv[3];
-        printf("String mode, using string \"%s\" \n", state->aes_string);
-    }
-    else if (strcmp(argv[1], "-f") == 0) {
-        /* printf("File mode \n"); */
-        state->mode = FILE_MODE;
-        state->aes_string = argv[2];
-    } else if (strcmp(argv[1], "-tb") == 0) {
-        // testbench mode, ie inputs from secwork testbench
-        state->mode = TESTBENCH;
-    }
-    else {
-        printf("No mode specifier\n");
-        exit(-1);
-    }
-        
-}
 
 // *************************  CDMA Transfer ******************************
 // Does cmda transfer from dest to src for size number of bytes
