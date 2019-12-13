@@ -44,7 +44,7 @@ static const unsigned char key[] = {
 };
 
 unsigned char text_openssl[] = {
-        0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96,
+        0x5b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96,
         0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17, 0x2a
 };
 
@@ -66,15 +66,13 @@ int main(int argc, char * argv[])   {
     mm_setup(&state);
         
     // *************************************************************************
-    // Set up memory to hold data
-    state.chunks = 1; // Assume 1 chunk unless stated otherwise
-
     //setup transation
     aes_t transaction = {
             .key = &(state.acc_addr[13]),       // Addr where key is stored
             .data = state.ocm_addr,             // Addr where data is stored
             .writeback_bram_addr = &(state.acc_addr[29]), // writeback address
-            .bram_addr = TRANSFER_SIZE(state.chunks)      // actual bram address
+            .bram_addr = TRANSFER_SIZE(1),      // actual bram address
+            .chunks = 1
     };
 
     if (state.mode == STRING) { // assumes 1 chunk string input
@@ -139,16 +137,16 @@ int main(int argc, char * argv[])   {
                 printf("Starting cdma transfer\n");
             #endif
 
-            cdma_transfer(&state, BRAM1, OCM, TRANSFER_SIZE(state.chunks));
+            cdma_transfer(&state, BRAM1, OCM, TRANSFER_SIZE(transaction.chunks));
                
             #ifdef DEBUG
                 printf("CDMA done, starting accelerator now\n");
             #endif
 
             // setup aes, one for now
-            if(state.chunks > 1)
-                state.chunks++;
-            address_set(state.acc_addr, NUM_CHUNKS, state.chunks); // 1 chunk
+            /* if(transaction.chunks > 1) */
+                /* transaction.chunks++; */
+            address_set(state.acc_addr, NUM_CHUNKS, transaction.chunks); // 1 chunk
             address_set(state.acc_addr, START_ADDR, 0x0); // start addr for bram
             address_set(state.acc_addr, FIRST_REG, 0x0);  // Reset sha unit
 
@@ -185,9 +183,9 @@ int main(int argc, char * argv[])   {
 
             // do cmda read back
             cdma_transfer(&state,
-                          (OCM + TRANSFER_SIZE(state.chunks)),  // Dest is ocm
-                          (BRAM1 + TRANSFER_SIZE(state.chunks)),// Source is BRAM
-                          TRANSFER_SIZE(state.chunks));
+                          (OCM + TRANSFER_SIZE(transaction.chunks)),  // Dest is ocm
+                          (BRAM1 + TRANSFER_SIZE(transaction.chunks)),// Source is BRAM
+                          TRANSFER_SIZE(transaction.chunks));
                
             /* #ifdef DEBUG */
                 printf("CDMA write back done, printing\n");

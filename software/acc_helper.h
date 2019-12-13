@@ -77,7 +77,6 @@ typedef struct program_state {
         padding_t       padding;
         uint32_t        silent;
         uint32_t        verbose;
-        uint32_t        chunks;
         uint32_t        timer_value;
         uint32_t*       cdma_addr;
         uint32_t*       bram_addr;
@@ -93,6 +92,7 @@ typedef struct aes_transaction {
         uint32_t*       data;
         uint32_t*       writeback_bram_addr;
         uint32_t        bram_addr;
+        uint32_t        chunks;
 } aes_t;
 
 // ************************  FUNCTION PROTOTYPES ***********************

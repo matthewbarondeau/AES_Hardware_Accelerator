@@ -488,7 +488,7 @@ void string_setup(pstate* state, aes_t* transaction)
     }
 
     // Write chunk to data_buffer for cdma
-    for(int i=0; i<state->chunks*4; i++)  {
+    for(int i=0; i<transaction->chunks*4; i++)  {
         transaction->data[i] = htobe32(((uint32_t*)buffer)[i]);
     }
 
@@ -527,12 +527,12 @@ void file_setup(pstate* state, aes_t* transaction)
 
          // figure out size
          int size = index << 3; // in bits
-         state->chunks = size/CHUNK_SIZE;
+         transaction->chunks = size/CHUNK_SIZE;
          /* if(size % 512 != 0) */
-             state->chunks++;
+             transaction->chunks++;
          /* printf("chunks: %d, size: %d\n", chunks, size); */
          // Write chunk to buffer for cdma
-         for(int i=0; i<state->chunks*4; i++)  { // 4 32 bit words in a chunk
+         for(int i=0; i<transaction->chunks*4; i++)  { // 4 32 bit words in a chunk
              transaction->data[i] = htobe32(((uint32_t*)buffer)[i]);
          }
          #ifdef DEBUG
@@ -557,14 +557,24 @@ void testbench_setup(aes_t* transaction)
     transaction->key[6] = 0x2d9810a3;
     transaction->key[7] = 0x0914dff4;
 
-    // Set key
+    // Set data
     transaction->data[0] = 0x6bc1bee2;
     transaction->data[1] = 0x2e409f96;
     transaction->data[2] = 0xe93d7e11;
     transaction->data[3] = 0x7393172a;
+
+
+    transaction->data[4] = 0x5bc1bee2;
+    transaction->data[5] = 0x2e409f96;
+    transaction->data[6] = 0xe93d7e11;
+    transaction->data[7] = 0x7393172a;
+
     
+    // Set number of chunks
+    transaction->chunks = 2;
 
     // Set BRAM addr chunks written back to
+    transaction->bram_addr = TRANSFER_SIZE(transaction->chunks);
     transaction->writeback_bram_addr[0] = transaction->bram_addr;
 
 }
