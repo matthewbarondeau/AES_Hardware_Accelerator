@@ -65,10 +65,16 @@ typedef enum program_mode {
         TESTBENCH
 } pmode;
 
+typedef enum padding_mode {
+        NO_PADDING,
+        PKCS7
+} padding_t;
+
 typedef struct program_state {
         char*           aes_string;
         char*           key_string;
         pmode           mode;
+        padding_t       padding;
         uint32_t        silent;
         uint32_t        verbose;
         uint32_t        chunks;
@@ -129,6 +135,8 @@ void print_aes(char *aes, uint32_t *encrypt, int endian_switch);
 int software_time(char* aes_out, pstate* state);
 // Encrypt string (ecb mode, sw)
 void encrypt_string(unsigned char* encrypt_out, pstate* state);
+// Decrypt string (ecb mode)
+void decrypt_string(unsigned char* decrypt_out, pstate* state, unsigned char* in);
 // Check sw and hw values
 void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state, int diff);
 // CDMA transfer

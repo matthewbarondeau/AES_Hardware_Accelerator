@@ -243,6 +243,7 @@ static struct argp_option options[] = {
   {"quiet",    'q', 0,      0,  "Don't produce any output" },
   {"string",   's', 0,      0,  "Use string as key and data input" },
   {"testbench",'t', 0, 	    0,  "Use testbench inputs"},
+  {"padding",  'p', "PADDING", 0, "Type of padding to use (no-padding, PKCS7)"},
   {"output",   'o', "FILE", 0,
    "Output to FILE instead of standard output" },
   { 0 }
@@ -274,7 +275,10 @@ parse_opt (int key, char *arg, struct argp_state *state)
 	/*   arguments->output_file = arg; */
 	/* printf("Ouput file %s\n", arg); */
         break;
-
+    case 'p': 
+        if(arg[0] == 'n') // no padding
+            ps->padding = NO_PADDING;
+        break;
     case ARGP_KEY_ARG:
         if (state->arg_num >= 2)
             /* Too many arguments. */
@@ -286,7 +290,6 @@ parse_opt (int key, char *arg, struct argp_state *state)
             ps->key_string = arg;
 
         break;
-
     case ARGP_KEY_END:
 	// Do nothing, no minimum number of args
         break;
@@ -306,6 +309,7 @@ void init_state(int argc, char* argv[], pstate* state)
     /* Default values. */
     state->silent = 0;
     state->verbose = 0;
+    state->padding = PKCS7;
     /* arguments.output_file = "-"; */
 
     /* Parse our arguments; every option seen by parse_opt will
@@ -458,14 +462,24 @@ void string_setup(pstate* state, aes_t* transaction)
             #endif
         }
 
-        // pading using PKCS7
-        int number_of_zeroes = CHUNK_SIZE - size;
-        for(int i = size; i < CHUNK_SIZE; i++) {
-            buffer[i] = (char)number_of_zeroes;
-            #ifdef DEBUG
-		if(state->verbose)
-		    printf("Buffer[%d]: %x\n", i, buffer[i]);
-            #endif
+        if(state->padding == PKCS7) { 
+            // pading using PKCS7
+            int number_of_zeroes = CHUNK_SIZE - size;
+            for(int i = size; i < CHUNK_SIZE; i++) {
+                buffer[i] = (char)number_of_zeroes;
+                #ifdef DEBUG
+                    if(state->verbose)
+                        printf("Buffer[%d]: %x\n", i, buffer[i]);
+                #endif
+            }
+        } else { // padding is no padding
+            for(int i = size + 1; i < CHUNK_SIZE; i++) {
+                buffer[i] = '0';
+                #ifdef DEBUG
+                    if(state->verbose)
+                        printf("Buffer[%d]: %x\n", i, buffer[i]);
+                #endif
+            }
         }
     } else {
         printf("Size: %d\n", size);
@@ -596,8 +610,14 @@ int software_time(char* aes_out, pstate* state)
     // print
     print_aes(aes_out, (uint32_t*)enc_out, 1);
     printf("SW aes is: %s\n", aes_out);
-    printf("Time SW = %d ns\n", diff);
-
+    /* printf("Time SW = %d ns\n", diff); */
+    
+    // Make sure encrypted text decrypts
+    char decrypt_out[80];
+    memset(aes_out, '\0', 33);
+    decrypt_string(decrypt_out, state, enc_out);
+    print_aes(aes_out, (uint32_t*)decrypt_out, 1);
+    printf("Decrypted SW aes is: %s\n", aes_out);
 }
 
 // encrypt text
@@ -606,6 +626,14 @@ void encrypt_string(unsigned char* encrypt_out, pstate* state)
     AES_KEY enc_key;
     AES_set_encrypt_key(state->key_string, 256, &enc_key);
     AES_ecb_encrypt(state->aes_string, encrypt_out, &enc_key, 1);
+}
+
+// decrypt string
+void decrypt_string(unsigned char* decrypt_out, pstate* state, unsigned char* in)
+{
+    AES_KEY enc_key;
+    AES_set_decrypt_key(state->key_string, 256, &enc_key);
+    AES_ecb_encrypt(in, decrypt_out, &enc_key, 0);
 }
 
 // Compare 2 AES values
