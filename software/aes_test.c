@@ -1,20 +1,20 @@
 /*
- * aes_test.c: Test AES_Hardware_Accelerator on the ZED board
+ *  aes_test.c:     Test AES_Hardware_Accelerator on the ZED board
  *
- *  AUTHOR: 	Matthew Davis (with help from Mark McDermott)
- *  CREATED: 	December 5th, 2019
+ *  AUTHOR: 	    Matthew Davis (with help from Mark McDermott)
+ *  CREATED: 	    December 5th, 2019
  *
  *
- *  DESCRIPTION: This program tests AES ECB encryption for the hardware 
- *               accelerator. First it sets up the CDMA in the PL and performs 
- *               DMA transfers using data provided. There are 2
- *               modes to provide data, a string mode and a file mode denoted
- *               by -s and -f respectively. A key must also be provided by string/
- *               file. The program will then spit out data, or it can be sent
- *               out to a file specified by -o. Using -c compares with software
- *               using the openssl implementation.
+ *  DESCRIPTION:    This program tests AES ECB encryption for the hardware 
+ *                  accelerator. First it sets up the CDMA in the PL and performs 
+ *                  DMA transfers using data provided. There are 2
+ *                  modes to provide data, a string mode and a file mode denoted
+ *                  by -s and -f respectively. A key must also be provided by string/
+ *                  file. The program will then spit out data, or it can be sent
+ *                  out to a file specified by -o. Using -c compares with software
+ *                  using the openssl implementation.
  *
- *  DEPENDENCIES: Works on the Xilinx ZED Board only
+ *  DEPENDENCIES:   Works on the Xilinx ZED Board only
  *
  *
  */
@@ -144,8 +144,6 @@ int main(int argc, char * argv[])   {
             #endif
 
             // setup aes, one for now
-            /* if(transaction.chunks > 1) */
-                /* transaction.chunks++; */
             address_set(state.acc_addr, NUM_CHUNKS, transaction.chunks); // 1 chunk
             address_set(state.acc_addr, START_ADDR, 0x0); // start addr for bram
             address_set(state.acc_addr, FIRST_REG, 0x0);  // Reset sha unit
@@ -201,6 +199,9 @@ int main(int argc, char * argv[])   {
             if(state.mode == STRING) {
                 char sw_aes[80] = {0};
                 int diff = software_time(sw_aes, &state);
+            } else if (state.mode == FILE_MODE) {
+                /* char sw_aes[80] = {0}; */
+                /* int diff = software_time(sw_aes, &state); */
             } else if(state.mode == TESTBENCH) {
                 char sw_aes[80] = {0};
                 // diff is in us
