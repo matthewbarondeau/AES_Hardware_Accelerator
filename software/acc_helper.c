@@ -241,8 +241,9 @@ static char args_doc[] = "DATA KEY";
 static struct argp_option options[] = {
   {"verbose",  'v', 0,      0,  "Produce verbose output" },
   {"quiet",    'q', 0,      0,  "Don't produce any output" },
-  {"string",   's', 0,      0,  "Use string as key and data input" },
   {"testbench",'t', 0, 	    0,  "Use testbench inputs"},
+  {"string",   's', 0,      0,  "Use string as key and data input" },
+  {"file",     'f', 0,      0,  "Use file as key and data input"},
   {"padding",  'p', "PADDING", 0, "Type of padding to use (no-padding, PKCS7)"},
   {"output",   'o', "FILE", 0,
    "Output to FILE instead of standard output" },
@@ -259,25 +260,28 @@ parse_opt (int key, char *arg, struct argp_state *state)
 
   switch (key)
     {
-    case 'q': 
-        ps->silent = 1;
-        break;
     case 'v':
         ps->verbose = 1;
       break;
-    case 's':
-	ps->mode = STRING;
+    case 'q': 
+        ps->silent = 1;
         break;
     case 't':
 	ps->mode = TESTBENCH;
         break;
-    case 'o':
-	/*   arguments->output_file = arg; */
-	/* printf("Ouput file %s\n", arg); */
+    case 's':
+	ps->mode = STRING;
+        break;
+    case 'f':
+	ps->mode = FILE_MODE;
         break;
     case 'p': 
         if(arg[0] == 'n') // no padding
             ps->padding = NO_PADDING;
+        break;
+    case 'o':
+	/*   arguments->output_file = arg; */
+	/* printf("Ouput file %s\n", arg); */
         break;
     case ARGP_KEY_ARG:
         if (state->arg_num >= 2)
@@ -500,37 +504,69 @@ void string_setup(pstate* state, aes_t* transaction)
 // Setup File mode memory
 void file_setup(pstate* state, aes_t* transaction)
 {
-    // open file
-    FILE* input_file = fopen(state->aes_string, "r");    
 
-    char buffer[CHUNK_SIZE] = {0}; // 1 chunk
-    // just doing 1 chunk for now
-    
+    // Need to get key input
+    FILE* key_input = fopen(state->key_string, "r");
+
     // check file
-    if (input_file == 0) {
-        printf("Unable to open\n");
-        exit(-1);
+    if (key_input == 0) {
+        printf("Unable to open key file\n");
     } else { 
-         // Need to get key input
-               
          // read file
          #ifdef DEBUG
-             printf("Reading input file\n");
+            printf("Reading data file\n");
          #endif
          int index = 0;
          int c;
-         while ((c = fgetc(input_file)) != EOF) {
-             buffer[index] = c;
+
+         // Get key
+         while ((c = fgetc(key_input)) != EOF && c != '\n') {
+             ((char*)transaction->key)[index] = c;
              ++index;
+             if(index > 32) {
+                 // Key too big
+                 printf("Key file too big\n");
+                 exit(-1);
+             }
          }
-         fclose(input_file);
+         fclose(key_input);
 
          // figure out size
-         int size = index << 3; // in bits
+    }
+
+    // open file
+    FILE* data_input = fopen(state->aes_string, "r");    
+
+    char buffer[4096] = {0}; // 1 page
+    // just doing 1 chunk for now
+    
+    // check file
+    if (data_input == 0) {
+        printf("Unable to open data file\n");
+        exit(-1);
+    } else { 
+         // read file
+         #ifdef DEBUG
+            printf("Reading data file\n");
+         #endif
+         int size = 0;
+         int c;
+         while ((c = fgetc(data_input)) != EOF) {
+             printf("Buffer: %d\n", c);
+             buffer[size] = c;
+             ++size;
+         }
+         fclose(data_input);
+
+         // figure out size
          transaction->chunks = size/CHUNK_SIZE;
-         /* if(size % 512 != 0) */
-             transaction->chunks++;
-         /* printf("chunks: %d, size: %d\n", chunks, size); */
+         if(size % CHUNK_SIZE != 0) { // will have to pad last chunk
+            transaction->chunks++;
+         }
+         #ifdef DEBUG 
+             printf("chunks: %d, size: %d\n", transaction->chunks, size);
+         #endif
+
          // Write chunk to buffer for cdma
          for(int i=0; i<transaction->chunks*4; i++)  { // 4 32 bit words in a chunk
              transaction->data[i] = htobe32(((uint32_t*)buffer)[i]);
@@ -538,6 +574,9 @@ void file_setup(pstate* state, aes_t* transaction)
          #ifdef DEBUG
              printf("finished writing\n");
          #endif
+
+         transaction->bram_addr = TRANSFER_SIZE(transaction->chunks);
+         transaction->writeback_bram_addr[0] = transaction->bram_addr;
     }
 }
 
