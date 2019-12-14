@@ -16,13 +16,14 @@
 	(
 		// Users to add ports here
 		input wire[31:0] din_BRAM,
-        	output wire[31:0] addr_BRAM,
-        	output wire clk_BRAM,
-        	output wire[31:0] dout_BRAM,
-        	output wire en_BRAM,
-        	output wire rst_BRAM,
-        	output wire[3:0] we_BRAM,
-        	output reg interrupt_out,
+    output wire[31:0] addr_BRAM,
+    output wire clk_BRAM,
+    output wire[31:0] dout_BRAM,
+    output wire en_BRAM,
+    output wire rst_BRAM,
+    output wire[3:0] we_BRAM,
+    output reg interrupt_out,
+    output wire aes_bus_control,
 
 		// User ports ends
 		// Do not modify the ports beyond this line
@@ -116,7 +117,6 @@
 	wire   [31:0]  aes_bram_addr;
   wire   [31:0]  aes_bram_write_addr;
 	wire   [255:0] aes_key_core1;
-  wire   [255:0] aes_key_core2;
 
 
 	// AXI4LITE signals
@@ -695,7 +695,7 @@
 	      // Address decoding for reading registers
 	      case ( axi_araddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] )
 	        5'h00   : reg_data_out <= slv_reg0;
-	        5'h01   : reg_data_out <= {30'b0, aes_complete, aes_digest_valid};
+	        5'h01   : reg_data_out <= {29'b0, aes_bus_control, aes_complete, aes_digest_valid};
 	        5'h02   : reg_data_out <= axi_bram_addr;
 	        5'h03   : reg_data_out <= axi_bram_read_data;
 	        5'h04   : reg_data_out <= axi_bram_write_data;
@@ -715,14 +715,14 @@
 	        5'h12   : reg_data_out <= aes_key_core1[95:64];
 	        5'h13   : reg_data_out <= aes_key_core1[63:32];
 	        5'h14   : reg_data_out <= aes_key_core1[31:0];
-	        5'h15   : reg_data_out <= aes_key_core2[255:224];
-	        5'h16   : reg_data_out <= aes_key_core2[223:192];
-	        5'h17   : reg_data_out <= aes_key_core2[191:160];
-	        5'h18   : reg_data_out <= aes_key_core2[159:128];
-	        5'h19   : reg_data_out <= aes_key_core2[127:96];
-	        5'h1A   : reg_data_out <= aes_key_core2[95:64];
-	        5'h1B   : reg_data_out <= aes_key_core2[63:32];
-	        5'h1C   : reg_data_out <= aes_key_core2[31:0];
+	        5'h15   : reg_data_out <= slv_reg21;
+	        5'h16   : reg_data_out <= slv_reg22;
+	        5'h17   : reg_data_out <= slv_reg23;
+	        5'h18   : reg_data_out <= slv_reg24;
+	        5'h19   : reg_data_out <= slv_reg25;
+	        5'h1A   : reg_data_out <= slv_reg26;
+	        5'h1B   : reg_data_out <= slv_reg27;
+	        5'h1C   : reg_data_out <= slv_reg28;
 	        5'h1D   : reg_data_out <= aes_bram_write_addr_start;
 	        5'h1E   : reg_data_out <= slv_reg30;
 	        5'h1F   : reg_data_out <= slv_reg31;
@@ -754,11 +754,11 @@
 		
     assign aes_key_core1  = { slv_reg13, slv_reg14, slv_reg15, slv_reg16,
                               slv_reg17, slv_reg18, slv_reg19, slv_reg20};
-                        
-    assign aes_key_core2  = { slv_reg21, slv_reg22, slv_reg23, slv_reg24,
-                              slv_reg25, slv_reg26, slv_reg27, slv_reg28};
-                        
-                           
+   
+    assign aes_bus_control = slv_reg1[2];
+
+    //Add logic for Mux Control and BRAM control here
+
                            
     always @( posedge S_AXI_ACLK)
     begin
@@ -826,8 +826,7 @@
         .aes_start_write(aes_start_write),
         .aes_bram_write_data(aes_bram_write_data),
         
-        .aes_key_input1(aes_key_core1),
-        .aes_key_input2(aes_key_core2)
+        .aes_key_input1(aes_key_core1)
          );
                     
 

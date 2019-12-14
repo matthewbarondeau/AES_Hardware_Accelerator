@@ -23,6 +23,7 @@
 		output wire rst_BRAM,
 		output wire[3:0] we_BRAM,
 		output wire interrupt_out,
+    output wire aes_bus_control,
 
 		// User ports ends
 		// Do not modify the ports beyond this line
@@ -84,7 +85,8 @@
 		.en_BRAM(en_BRAM),
 		.rst_BRAM(rst_BRAM),
 		.we_BRAM(we_BRAM),
-		.interrupt_out(interrupt_out)
+		.interrupt_out(interrupt_out),
+    .aes_bus_control(aes_bus_control)
 	);
 
 
