@@ -695,7 +695,7 @@
 	      // Address decoding for reading registers
 	      case ( axi_araddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] )
 	        5'h00   : reg_data_out <= slv_reg0;
-	        5'h01   : reg_data_out <= {29'b0, aes_bus_control, aes_complete, aes_digest_valid};
+	        5'h01   : reg_data_out <= {30'b0, aes_complete, aes_digest_valid};
 	        5'h02   : reg_data_out <= axi_bram_addr;
 	        5'h03   : reg_data_out <= axi_bram_read_data;
 	        5'h04   : reg_data_out <= axi_bram_write_data;
@@ -755,7 +755,7 @@
     assign aes_key_core1  = { slv_reg13, slv_reg14, slv_reg15, slv_reg16,
                               slv_reg17, slv_reg18, slv_reg19, slv_reg20};
    
-    assign aes_bus_control = slv_reg1[2];
+    assign aes_bus_control = slv_reg0[2];
 
     //Add logic for Mux Control and BRAM control here
 
@@ -801,6 +801,7 @@
         begin
             axi_start_sha       <= slv_reg0[0];         // Start the SHA256 generation
             aes_clear_reg_n     <= slv_reg0[1];         // Delayed 1/2 clock to prevent race
+            
             interrupt_out       <= aes_complete;
         end
     end

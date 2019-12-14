@@ -69,6 +69,8 @@ module AES_TOP(
 
     assign core1_block  = { block_reg_core1[0], block_reg_core1[1],
                             block_reg_core1[2], block_reg_core1[3]};
+                            
+    reg [255:0] old_aes_key;
 
     localparam
         INIT        = 0,
@@ -114,6 +116,7 @@ module AES_TOP(
             aes_start_read      <= 1'b0;
             aes_complete        <= 1'b0;
             NXT_STATE           <= INIT;
+            old_aes_key         <= 256'h0;
         end else if(aes_rst_n == 1'b1) begin
             if((STATE == INIT) && (axi_start_aes == 1'b1)) begin
                 aes_bram_addr <= aes_bram_addr_start;
@@ -136,7 +139,11 @@ module AES_TOP(
                 NXT_STATE <= AES_READ3;
             end else if((STATE == AES_READ3) && (reg_num[3:0] == 4'b0011)) begin
                 reg_num_nxt	<= 4'b0000;
-                NXT_STATE <= START_AES;
+                if(old_aes_key != aes_key_input1) begin
+                    NXT_STATE <= START_AES;
+                end else begin
+                    NXT_STATE <= START_AES2;
+                end
             end else if((STATE == AES_READ3) && (reg_num[3:0] != 4'b0011)) begin
                 reg_num_nxt	<= reg_num + 4'b0001;
                 aes_bram_addr <= aes_bram_addr_nxt + 32'h4;
@@ -145,6 +152,7 @@ module AES_TOP(
             end else if((STATE == START_AES) && (aes_idle == 1'b1)) begin
                 first_chunk <= 1'b1;
                 NXT_STATE	<= WAIT_AES;
+                old_aes_key <= aes_key_input1;
             end else if((STATE == START_AES) && (aes_idle == 1'b0)) begin
                 NXT_STATE <= START_AES;
             end else if((STATE == WAIT_AES) && (aes_idle == 1'b0)) begin
@@ -259,7 +267,7 @@ module AES_TOP(
         .ready(aes_idle),
 
         .key(aes_key_input1),
-        .keylen(1'b1),	// 1 for 256 bit, 0 for 128
+        .keylen(1'b1), // 1 for 256 bit, 0 for 128
 
         .block(core1_block),
         .result(aes_result),
