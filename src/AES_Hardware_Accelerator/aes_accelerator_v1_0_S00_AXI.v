@@ -15,7 +15,7 @@
 	)
 	(
 		// Users to add ports here
-		input wire[31:0] din_BRAM,
+    input wire[31:0] din_BRAM,
     output wire[31:0] addr_BRAM,
     output wire clk_BRAM,
     output wire[31:0] dout_BRAM,
