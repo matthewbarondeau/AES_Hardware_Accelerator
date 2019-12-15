@@ -13,7 +13,7 @@ An implementation of AES encryption using hardware acceleration on the Zedboard.
 ### Register map
 ```
 slv_reg0[31:0] = {30'bo, reset_n, start_axi}  
-slv_reg1[31:0] = {30'b0, aes_complete, aes_digest_valid}  
+slv_reg1[31:0] = {29'b0, aes_bus_control, aes_complete, aes_digest_valid}  
 slv_reg2[31:0] = axi_bram_addr  
 slv_reg3[31:0] = axi_bram_read_data  
 slv_reg4[31:0] = axi_bram_write_data  
@@ -24,28 +24,28 @@ slv_reg8[31:0] = aes_digest_reg[127:96]
 slv_reg9[31:0] = aes_digest_reg[95:64]  
 slv_regA[31:0] = aes_digest_reg[63:32]  
 slv_regB[31:0] = aes_digest_reg[31:0]  
-slv_regC[31:0]= 32'hbeefface;
-slv_regD[31:0]= aes_key_core1[255:224];
-slv_regE[31:0]= aes_key_core1[223:192];
-slv_regF[31:0]= aes_key_core1[191:160];
-slv_reg10[31:0]= aes_key_core1[159:128];
-slv_reg11[31:0]= aes_key_core1[127:96];
-slv_reg12[31:0]= aes_key_core1[95:64];
-slv_reg13[31:0]= aes_key_core1[63:32];
-slv_reg14[31:0]= aes_key_core1[31:0];
-slv_reg15[31:0]= aes_key_core2[255:224];
-slv_reg16[31:0]= aes_key_core2[223:192];
-slv_reg17[31:0]= aes_key_core2[191:160];
-slv_reg18[31:0]= aes_key_core2[159:128];
-slv_reg19[31:0]= aes_key_core2[127:96];
-slv_reg1A[31:0]= aes_key_core2[95:64];
-slv_reg1B[31:0]= aes_key_core2[63:32];
-slv_reg1C[31:0]= aes_key_core2[31:0];
-slv_reg1D[31:0]= aes_bram_write_addr_start;
+slv_regC[31:0]= 32'hbeefface  
+slv_regD[31:0]= aes_key_core1[255:224]  
+slv_regE[31:0]= aes_key_core1[223:192]  
+slv_regF[31:0]= aes_key_core1[191:160]  
+slv_reg10[31:0]= aes_key_core1[159:128]  
+slv_reg11[31:0]= aes_key_core1[127:96]  
+slv_reg12[31:0]= aes_key_core1[95:64]  
+slv_reg13[31:0]= aes_key_core1[63:32]  
+slv_reg14[31:0]= aes_key_core1[31:0]  
+slv_reg15[31:0]= slv_reg21  
+slv_reg16[31:0]= slv_reg22  
+slv_reg17[31:0]= slv_reg23  
+slv_reg18[31:0]= slv_reg24  
+slv_reg19[31:0]= slv_reg25  
+slv_reg1A[31:0]= slv_reg26  
+slv_reg1B[31:0]= slv_reg27  
+slv_reg1C[31:0]= slv_reg28  
+slv_reg1D[31:0]= aes_bram_write_addr_start  
 ```
 
 ### Key order
 ```
 key   = {slv_reg13, slv_reg14, slv_reg15, slv_reg16,  
-         slv_reg18, slv_reg18, slv_reg19, slv_reg20};  
+         slv_reg18, slv_reg18, slv_reg19, slv_reg20}  
 ```
