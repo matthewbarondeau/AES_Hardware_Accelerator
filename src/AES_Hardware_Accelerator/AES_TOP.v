@@ -332,7 +332,7 @@ module AES_TOP(
             aes_bram_addr_nxt <= aes_bram_addr;
             aes_bram_write_addr_nxt <= aes_bram_write_addr;
             aes_bram_addr_read_nxt <= aes_bram_addr_read;
-            aes_loop_ctr_nxt <= aes_loop_ctr;
+            aes_loop_ctr_nxt <= 0;
             STATE <= INIT;
         end else if(aes_rst_n == 1'b1) begin
             reg_num <= reg_num_nxt;
