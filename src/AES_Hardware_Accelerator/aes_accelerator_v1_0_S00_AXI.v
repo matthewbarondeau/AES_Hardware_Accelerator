@@ -758,6 +758,8 @@
     assign aes_key_core1  = { slv_reg13, slv_reg14, slv_reg15, slv_reg16,
                               slv_reg17, slv_reg18, slv_reg19, slv_reg20};
    
+    assign aes_encdec = slv_reg0[3];
+   
     assign aes_bus_control = slv_reg0[2];
     
     assign axi_bram_addr   = slv_reg2;
@@ -839,6 +841,7 @@
         .aes_bram_write_data(aes_bram_write_data),
         
         .aes_key_input1(aes_key_core1),
+        .aes_encdec(aes_encdec),
         .read_bram_state(read_bram_state),
         .aes_process_state(aes_process_state),
         .aes_key_init_state(aes_key_init_state),

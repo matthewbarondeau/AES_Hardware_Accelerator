@@ -40,6 +40,7 @@ module AES_TOP(
     output reg  [31:0]  aes_bram_write_data,
   
     input  wire [255:0] aes_key_input1,
+    input  wire         aes_encdec,
     output reg  [31:0]  read_bram_state,
     output reg  [31:0]  aes_process_state,
     output reg  [31:0]  aes_key_init_state,
@@ -234,10 +235,10 @@ module AES_TOP(
                 next_chunk <= 1'b1;
                 next_chunk_core2 <= 1'b1;
                 NXT_STATE <= WAIT_AES2;
-                aes_process_state <= aes_process_state + 1;
+                aes_key_init_state <= aes_key_init_state + 1;
             end else if((STATE == START_AES2) && ((aes_idle == 1'b0) || (aes_idle_core2 == 1'b0))) begin
                 NXT_STATE <= START_AES2;
-                aes_process_state <= aes_process_state + 1;
+                aes_key_init_state <= aes_key_init_state + 1;
             end 
             
         // WAIT_AES2
@@ -399,7 +400,7 @@ module AES_TOP(
         .clk(aes_clk),
         .reset_n(aes_core_rst_n),
 
-        .encdec(1'b1),
+        .encdec(aes_encdec),
         .init(first_chunk),
         .next(next_chunk_core2),
         .ready(aes_idle_core2),
