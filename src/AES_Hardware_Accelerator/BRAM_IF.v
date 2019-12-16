@@ -22,10 +22,6 @@
 
 module BRAM_IF(
 
- // DEBUG -- Need to remove eventually
-    output  reg [31:0]      bram_write_data,        // Debug only  -- need to remove
-    output  reg [3:0]       STATE,                  // Debug only  -- need to remove
-    
  // AXI I/F
     input   wire            axi_start_read,         // Start AXI read tansaction
     input   wire            axi_start_write,        // Start AXI write transaction
@@ -83,8 +79,8 @@ module BRAM_IF(
     // --------------------------- BIU STATE MACHINE -----------------------------
     // ---------------------------------------------------------------------------       
   
-    //reg [3:0]       STATE;                  //
-    reg [3:0]       NXT_STATE;   
+    reg [3:0]       STATE;
+    reg [3:0]       NXT_STATE;
     
  
    
@@ -199,7 +195,6 @@ module BRAM_IF(
                 en_BRAM             <= 1'b1;
                 we_BRAM             <= 4'b1111;
                 dout_BRAM           <= axi_bram_write_data;     // Assert Write Data
-                bram_write_data     <= axi_bram_write_data;     // DEBUG
                 addr_BRAM           <= axi_bram_addr[31:0];     // Assert address; 
                 NXT_STATE           <= WRITE3;                  
             end
@@ -269,7 +264,6 @@ module BRAM_IF(
                 en_BRAM             <= 1'b1;
                 we_BRAM             <= 4'b1111;
                 dout_BRAM           <= sha_bram_write_data;     // Assert Write Data
-                bram_write_data     <= sha_bram_write_data;     // DEBUG
                 addr_BRAM           <= sha_bram_addr[31:0];     // Assert address; 
                 NXT_STATE           <= SHA_WRITE3;                  
             end

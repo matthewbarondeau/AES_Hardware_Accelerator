@@ -97,14 +97,12 @@
 	wire	[31:0]	axi_bram_read_data;
 	wire		aes_start_read;
 	wire	[31:0]	aes_bram_read_data;
-  wire    aes_start_write;
-  wire  [31:0]  aes_bram_write_data;
+    wire    aes_start_write;
+    wire  [31:0]  aes_bram_write_data;
 	reg		axi_start_sha;
 	reg		aes_clear_reg_n;
 
 	wire		bram_complete;
-	wire	[31:0]	bram_write_data;
-	wire	[3:0]	STATE;
 	
 	wire		axi_clk		= S_AXI_ACLK;
 	wire		axi_rst 	= S_AXI_ARESETN;
@@ -115,9 +113,14 @@
 	wire		aes_digest_valid;
 	wire		aes_complete;
 	wire   [31:0]  aes_bram_addr;
-  wire   [31:0]  aes_bram_write_addr;
+    wire   [31:0]  aes_bram_write_addr;
 	wire   [255:0] aes_key_core1;
-
+    
+    // Profile Signals
+    wire  [31:0]    read_bram_state;
+    wire  [31:0]    aes_process_state;
+    wire  [31:0]    aes_key_init_state;
+    wire  [31:0]    write_bram_state;
 
 	// AXI4LITE signals
 	reg [C_S_AXI_ADDR_WIDTH-1 : 0] 	axi_awaddr;
@@ -180,11 +183,11 @@
 	integer	 byte_index;
 	reg	 aw_en;
 
-    wire [31:0]     axi_bram_addr       = slv_reg2;
-    wire [31:0]     axi_bram_write_data = slv_reg4;
-    wire [31:0]     aes_num_chunks      = slv_reg5; // Number of chunks
-    wire [31:0]     aes_bram_addr_start = slv_reg6; // Starting address in BRAM
-    wire [31:0]     aes_bram_write_addr_start = slv_reg29;
+    wire [31:0]     axi_bram_addr;//       = slv_reg2;
+    wire [31:0]     axi_bram_write_data;// = slv_reg4;
+    wire [31:0]     aes_num_chunks;//      = slv_reg5; // Number of chunks
+    wire [31:0]     aes_bram_addr_start;// = slv_reg6; // Starting address in BRAM
+    wire [31:0]     aes_bram_write_addr_start;// = slv_reg29;
 
 	// I/O Connections assignments
 
@@ -715,10 +718,10 @@
 	        5'h12   : reg_data_out <= aes_key_core1[95:64];
 	        5'h13   : reg_data_out <= aes_key_core1[63:32];
 	        5'h14   : reg_data_out <= aes_key_core1[31:0];
-	        5'h15   : reg_data_out <= slv_reg21;
-	        5'h16   : reg_data_out <= slv_reg22;
-	        5'h17   : reg_data_out <= slv_reg23;
-	        5'h18   : reg_data_out <= slv_reg24;
+	        5'h15   : reg_data_out <= read_bram_state;
+	        5'h16   : reg_data_out <= aes_process_state;
+	        5'h17   : reg_data_out <= aes_key_init_state;
+	        5'h18   : reg_data_out <= write_bram_state;
 	        5'h19   : reg_data_out <= slv_reg25;
 	        5'h1A   : reg_data_out <= slv_reg26;
 	        5'h1B   : reg_data_out <= slv_reg27;
@@ -756,8 +759,16 @@
                               slv_reg17, slv_reg18, slv_reg19, slv_reg20};
    
     assign aes_bus_control = slv_reg0[2];
-
-    //Add logic for Mux Control and BRAM control here
+    
+    assign axi_bram_addr   = slv_reg2;
+    
+    assign axi_bram_write_data = slv_reg4;
+    
+    assign aes_num_chunks      = slv_reg5;
+    
+    assign aes_bram_addr_start = slv_reg6;
+    
+    assign aes_bram_write_addr_start  = slv_reg29;
 
                            
     always @( posedge S_AXI_ACLK)
@@ -827,16 +838,17 @@
         .aes_start_write(aes_start_write),
         .aes_bram_write_data(aes_bram_write_data),
         
-        .aes_key_input1(aes_key_core1)
+        .aes_key_input1(aes_key_core1),
+        .read_bram_state(read_bram_state),
+        .aes_process_state(aes_process_state),
+        .aes_key_init_state(aes_key_init_state),
+        .write_bram_state(write_bram_state)
          );
                     
 
      //**************************************
      //BRAM INSTANTIATED HERE. REFER TO THE BRAM_IF.v FILE TO UNDERSTAND HOW TO USE IT
      BRAM_IF  MI(
-        // DEBUG  
-        .bram_write_data(bram_write_data),
-        .STATE(STATE),
         
         // AXI I/F
         .axi_start_read(axi_start_read),
