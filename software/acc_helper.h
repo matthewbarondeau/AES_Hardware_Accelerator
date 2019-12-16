@@ -17,6 +17,8 @@
 /* #define DEBUG2 */
 /* #define DEBUG_BRAM */
 
+#define PAGE_SIZE 4096
+
 // ******************************************************************** 
 // Memomoy Map
 #define CDMA                0x70000000
@@ -46,6 +48,10 @@
 #define NUM_CHUNKS          0x14
 #define START_ADDR          0x18
 #define FIRST_REG           0x00
+#define SECOND_REG          0x04
+
+#define DMA_MUX             0x00
+#define ACC_MUX             0x04
 
 // ******************************************************************** 
 // Device path name for the GPIO device
@@ -73,6 +79,7 @@ typedef enum padding_mode {
 typedef struct program_state {
         char*           aes_string;
         char*           key_string;
+        char*           output_file;
         pmode           mode;
         padding_t       padding;
         uint32_t        silent;
@@ -139,6 +146,8 @@ void encrypt_string(unsigned char* encrypt_out, pstate* state);
 void decrypt_string(unsigned char* decrypt_out, pstate* state, unsigned char* in);
 // Check sw and hw values
 void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state, int diff);
+// Output file
+void output_file_stuff(pstate* state, aes_t* transaction);
 // CDMA transfer
 void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size);
 

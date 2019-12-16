@@ -280,8 +280,7 @@ parse_opt (int key, char *arg, struct argp_state *state)
             ps->padding = NO_PADDING;
         break;
     case 'o':
-	/*   arguments->output_file = arg; */
-	/* printf("Ouput file %s\n", arg); */
+	ps->output_file = arg;
         break;
     case ARGP_KEY_ARG:
         if (state->arg_num >= 2)
@@ -314,7 +313,7 @@ void init_state(int argc, char* argv[], pstate* state)
     state->silent = 0;
     state->verbose = 0;
     state->padding = PKCS7;
-    /* arguments.output_file = "-"; */
+    state->output_file = "-";
 
     /* Parse our arguments; every option seen by parse_opt will
      be reflected in arguments. */
@@ -549,31 +548,50 @@ void file_setup(pstate* state, aes_t* transaction)
          #ifdef DEBUG
             printf("Reading data file\n");
          #endif
-         int size = 0;
-         int c;
-         while ((c = fgetc(data_input)) != EOF) {
-             printf("Buffer: %d\n", c);
-             buffer[size] = c;
-             ++size;
-         }
-         fclose(data_input);
+
+         // try using fread
+         long size, pages;
+         fseek(data_input, 0, SEEK_END);
+         size = ftell(data_input);
+         rewind(data_input);
 
          // figure out size
          transaction->chunks = size/CHUNK_SIZE;
+         pages = size/PAGE_SIZE;
+         if(size%PAGE_SIZE)
+             pages++;
+
+         #ifdef DEBUG 
+             printf("Chunks: %d, size: %lu, pages: %lu\n", 
+                     transaction->chunks, size, pages);
+         #endif
+
+         for(int page = 0; page < pages; page++) {
+             // Put stuff in Buffer
+             int length = size >= PAGE_SIZE ? PAGE_SIZE : size; 
+             if(size < PAGE_SIZE) {
+                fread(buffer, 1, size, data_input);
+             } else {
+                fread(buffer, 1, PAGE_SIZE, data_input);
+                size -= PAGE_SIZE;
+             }
+             // Write chunk to buffer for cdma
+             for(int i=0; i < length/4; i++)  { // 4 32 bit words in a chunk
+                 transaction->data[i + page*PAGE_SIZE/4] = htobe32(((uint32_t*)buffer)[i]);
+             }
+         }
+         
+         // Padding
          if(size % CHUNK_SIZE != 0) { // will have to pad last chunk
             transaction->chunks++;
          }
-         #ifdef DEBUG 
-             printf("chunks: %d, size: %d\n", transaction->chunks, size);
-         #endif
 
-         // Write chunk to buffer for cdma
-         for(int i=0; i<transaction->chunks*4; i++)  { // 4 32 bit words in a chunk
-             transaction->data[i] = htobe32(((uint32_t*)buffer)[i]);
-         }
          #ifdef DEBUG
              printf("finished writing\n");
          #endif
+
+         // Close file
+         fclose(data_input);
 
          transaction->bram_addr = TRANSFER_SIZE(transaction->chunks);
          transaction->writeback_bram_addr[0] = transaction->bram_addr;
@@ -689,6 +707,7 @@ void decrypt_string(unsigned char* decrypt_out, pstate* state, unsigned char* in
 void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state,
                         int diff)
 {
+    if(state->mode != FILE_MODE) {
     int compare = strcmp(hw_aes, sw_aes);
     if(compare != 0) {
         printf("SW and HW values not the same!!!\n");
@@ -697,6 +716,7 @@ void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state,
     #ifdef DEBUG 
     else {
             printf("SW and HW AES values the same :)\n");
+    }
     }
     
     int hw_nsecs = state->timer_value*10; // 100Mhz = 10 ns per 
@@ -708,6 +728,73 @@ void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state,
 
 }
 
+// *************************  Output File ******************************
+// Puts encrypted data into file
+
+void output_file_stuff(pstate* state, aes_t* transaction) {
+    
+    // open file
+    FILE* output_file = fopen(state->output_file, "w");
+
+    // Pointer where data is
+    uint32_t* encrypted_data = &(transaction->data[transaction->chunks*4]);
+
+    uint32_t buffer[PAGE_SIZE/4] = {0}; // 1 page
+    // just doing 1 chunk for now
+    
+    // check file
+    if (output_file == 0) {
+        printf("Unable to open output file\n");
+        exit(-1);
+    } else { 
+         // read file
+         #ifdef DEBUG
+            printf("Starting output file \n");
+         #endif
+         
+         // Figure out size
+         long size, pages;
+         size = TRANSFER_SIZE(transaction->chunks);
+         pages = size/PAGE_SIZE;
+         if(size%PAGE_SIZE != 0)
+             pages++;
+
+         #ifdef DEBUG 
+             printf("Chunks: %d, bytes: %lu, pages: %lu\n", 
+                     transaction->chunks, size, pages);
+         #endif
+
+         for(int page = 0; page < pages; page++) {
+             // Put stuff in Buffer
+             int length = size > PAGE_SIZE ? PAGE_SIZE : size; 
+
+             // Write chunk to buffer for cdma
+             for(int i=0; i < length/4; i++)  { // 4 32 bit words in a chunk
+                 buffer[i] = be32toh((encrypted_data)[i + page*(PAGE_SIZE/4)]);
+             }
+             
+             // Write buffer to disk
+             if(size < PAGE_SIZE) {
+                fwrite(buffer, 1, size, output_file);
+             } else {
+                fwrite(buffer, 1, PAGE_SIZE, output_file);
+                size -= PAGE_SIZE;
+             }
+         }
+         
+         /* // Padding */
+         /* if(size % CHUNK_SIZE != 0) { // will have to pad last chunk */
+         /*    transaction->chunks++; */
+         /* } */
+
+         // Close file
+         fclose(output_file);
+
+         #ifdef DEBUG
+             printf("finished writing\n");
+         #endif
+    }
+}
 
 // *************************  CDMA Transfer ******************************
 // Does cmda transfer from dest to src for size number of bytes

@@ -122,7 +122,7 @@ int main(int argc, char * argv[])   {
     #ifdef DEBUG 
         printf("Fork\n");
     #endif
-
+    
     pid_t childpid = vfork();     // Need to use vfork to prevent race condition
     if (childpid >=0)       // Fork suceeded    
     {
@@ -137,6 +137,7 @@ int main(int argc, char * argv[])   {
                 printf("Starting cdma transfer\n");
             #endif
 
+            /* address_set(state.acc_addr, SECOND_REG, DMA_MUX);  // Set mux for bram */ 
             cdma_transfer(&state, BRAM1, OCM, TRANSFER_SIZE(transaction.chunks));
                
             #ifdef DEBUG
@@ -146,13 +147,14 @@ int main(int argc, char * argv[])   {
             // setup aes, one for now
             address_set(state.acc_addr, NUM_CHUNKS, transaction.chunks); // 1 chunk
             address_set(state.acc_addr, START_ADDR, 0x0); // start addr for bram
-            address_set(state.acc_addr, FIRST_REG, 0x0);  // Reset sha unit
+            address_set(state.acc_addr, FIRST_REG, 0x0);  // Reset aes unit
 
             // start timer 
             smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x1);     // Start timer
             smb(GPIO_LED, GPIO_LED_NUM, 0x1);               // Turn on the LED
 
             // start AES
+            /* address_set(state.acc_addr, SECOND_REG, ACC_MUX); */
             address_set(state.acc_addr, FIRST_REG, 0x3);  // Enable aes conversion
             address_set(state.acc_addr, FIRST_REG, 0x2);  // Turn off start
                 
@@ -172,7 +174,9 @@ int main(int argc, char * argv[])   {
             // Check for interrupt 
             while (!get_det_int());
         
-            address_set(state.acc_addr, FIRST_REG, 0x2);        // Disable aes conversion
+            /* address_set(state.acc_addr, SECOND_REG, DMA_MUX); */
+            address_set(state.acc_addr, FIRST_REG, 0x02);       // Disable aes conversion
+                                                                // Set mux for bram
 
             // Timer Stop plus store value
             state.timer_value = rm(GPIO_TIMER_VALUE);           // Read the timer value
@@ -185,23 +189,38 @@ int main(int argc, char * argv[])   {
                           (BRAM1 + TRANSFER_SIZE(transaction.chunks)),// Source is BRAM
                           TRANSFER_SIZE(transaction.chunks));
                
-            /* #ifdef DEBUG */
-                printf("CDMA write back done, printing\n");
-            /* #endif */
+            #ifdef DEBUG
+                printf("CDMA write back done, printing result\n");
+            #endif
                 
             // Print value of ecb mode aes from hw
             char aes[80] = {0};
-            print_aes(aes, &(state.ocm_addr[4]), 0);
+            print_aes(aes, &(state.ocm_addr[transaction.chunks]), 0);
             printf("HW AES is: %s\n", aes);
+
+            if(state.output_file[0] != '-') {
+                #ifdef DEBUG
+                    printf("Output file writeback\n");
+                #endif
                 
-            
+                output_file_stuff(&state, &transaction);
+                printf("Output file writeback\n");
+            }
+                
+            #ifdef DEBUG
+                printf("Calculating time, doing SW aes\n");
+            #endif
+             
             // Calculate in sw and see time
             if(state.mode == STRING) {
                 char sw_aes[80] = {0};
                 int diff = software_time(sw_aes, &state);
             } else if (state.mode == FILE_MODE) {
-                /* char sw_aes[80] = {0}; */
+                // compare values and what not
+                char sw_aes[80] = {0};
                 /* int diff = software_time(sw_aes, &state); */
+                int diff = 1;
+                compare_aes_values(aes, sw_aes, &state, diff);
             } else if(state.mode == TESTBENCH) {
                 char sw_aes[80] = {0};
                 // diff is in us
