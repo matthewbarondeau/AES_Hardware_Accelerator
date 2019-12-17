@@ -125,10 +125,10 @@ module AES_TOP(
             block_reg_core1[1]  <= 32'h0;
             block_reg_core1[2]  <= 32'h0;
             block_reg_core1[3]  <= 32'h0;
-            block_reg_core2[0]  <= 32'h0;
-            block_reg_core2[1]  <= 32'h0;
-            block_reg_core2[2]  <= 32'h0;
-            block_reg_core2[3]  <= 32'h0;
+            block_reg_core1[4]  <= 32'h0;
+            block_reg_core1[5]  <= 32'h0;
+            block_reg_core1[6]  <= 32'h0;
+            block_reg_core1[7]  <= 32'h0;
             first_chunk         <= 1'b0;
             next_chunk          <= 1'b0;
             next_chunk_core2    <= 1'b0;
@@ -223,6 +223,7 @@ module AES_TOP(
             end else if((STATE == WAIT_AES1) && (aes_idle == 1'b1)) begin
                 next_chunk  <= 1'b1;
                 NXT_STATE   <= READ4;
+                reg_num_nxt <= reg_num + 1;
                 aes_key_init_state <= aes_key_init_state + 1;
             end 
 
