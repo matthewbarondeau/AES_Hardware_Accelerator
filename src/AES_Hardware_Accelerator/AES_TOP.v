@@ -67,7 +67,7 @@ module AES_TOP(
     reg   [31:0]    aes_loop_ctr_nxt;
     reg             next_chunk;
     reg             aes_data_valid;
-    reg   [31:0]    block_reg_core1 [0:3];
+    reg   [31:0]    block_reg_core1 [0:7];
     reg   [31:0]    write_reg_core1 [0:7];
     wire  [127:0]   core1_block;
     wire            aes_idle;
@@ -87,8 +87,8 @@ module AES_TOP(
     assign core1_block  = { block_reg_core1[0], block_reg_core1[1],
                             block_reg_core1[2], block_reg_core1[3]};
 
-    assign block_core2  = { block_reg_core2[0], block_reg_core2[1],
-                            block_reg_core2[2], block_reg_core2[3]};
+    assign block_core2  = { block_reg_core1[4], block_reg_core1[5],
+                            block_reg_core1[6], block_reg_core1[7]};
 
     localparam
         INIT        = 0,
@@ -195,7 +195,6 @@ module AES_TOP(
         // AES_READ3
         // loop condition
             else if((STATE == READ3) && (reg_num[3:0] == 4'b0011)) begin
-                reg_num_nxt	<= 4'b0000;
                 NXT_STATE <= START_AES1;
                 read_bram_state <= read_bram_state + 1;
             end else if((STATE == READ3) && (reg_num[3:0] != 4'b0011)) begin
@@ -232,7 +231,6 @@ module AES_TOP(
             else if((STATE == READ4)) begin
                 next_chunk <= 1'b0;
                 aes_start_read <= 1'b1;
-                reg_num_nxt <= 0;
                 NXT_STATE <= READ5;
                 read_bram_state <= read_bram_state + 1;
             end
@@ -245,17 +243,17 @@ module AES_TOP(
             end else if((STATE == READ5) && (bram_complete)) begin
                 aes_start_read <= 1'b0;
                 NXT_STATE <= READ6;
-                block_reg_core2[reg_num] <= aes_bram_read_data;
+                block_reg_core1[reg_num] <= aes_bram_read_data;
                 read_bram_state <= read_bram_state + 1;
             end
             
         // READ6
         // loop
-            else if((STATE == READ6) && (reg_num[3:0] == 4'b0011)) begin
+            else if((STATE == READ6) && (reg_num[3:0] == 4'b0111)) begin
                 reg_num_nxt <= 4'b0000;
                 NXT_STATE <= START_AES2;
                 read_bram_state <= read_bram_state + 1;
-            end else if((STATE == READ6) && (reg_num[3:0] != 4'b0011)) begin
+            end else if((STATE == READ6) && (reg_num[3:0] != 4'b0111)) begin
                 reg_num_nxt <= reg_num + 4'b0001;
                 aes_bram_addr <= aes_bram_addr_nxt + 32'h4;
                 aes_start_read <= 1'b1;
@@ -435,7 +433,6 @@ module AES_TOP(
     always @(posedge aes_clk) begin
         aes_core_rst_n <= aes_rst_n;
     end
-
 
     aes_core aes_core1(
         .clk(aes_clk),
