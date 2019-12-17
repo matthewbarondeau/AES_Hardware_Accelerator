@@ -290,6 +290,7 @@ module AES_TOP(
                 next_chunk_core2 <= 1'b0;
                 aes_process_state <= aes_process_state + 1;
                 aes_result_reg <= aes_result;
+                aes_bram_addr <= aes_bram_write_addr;
             end 
         
         // WRITE1
