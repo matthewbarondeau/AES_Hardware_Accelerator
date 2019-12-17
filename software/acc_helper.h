@@ -49,6 +49,8 @@
 #define START_ADDR          0x18
 #define FIRST_REG           0x00
 #define SECOND_REG          0x04
+#define ENCRYPT             0x08
+#define DECRYPT             0x00
 
 #define DMA_MUX             0x00
 #define ACC_MUX             0x04
@@ -84,6 +86,7 @@ typedef struct program_state {
         padding_t       padding;
         uint32_t        silent;
         uint32_t        verbose;
+        uint32_t        encdec;
         uint32_t        timer_value;
         uint32_t*       cdma_addr;
         uint32_t*       bram_addr;
@@ -150,5 +153,5 @@ void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state, int diff);
 void output_file_stuff(pstate* state, aes_t* transaction);
 // CDMA transfer
 void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size);
-
-
+// Timeval difference
+int time_diff(struct timeval first, struct timeval last);

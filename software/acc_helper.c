@@ -235,7 +235,7 @@ static char doc[] =
     "AES Test -- a program that does AES Encryption with HW acceleration";
 
 /* A description of the arguments we accept. */
-static char args_doc[] = "DATA KEY";
+static char args_doc[] = "ENC/DEC DATA KEY";
 
 /* The options we understand. */
 static struct argp_option options[] = {
@@ -283,11 +283,16 @@ parse_opt (int key, char *arg, struct argp_state *state)
 	ps->output_file = arg;
         break;
     case ARGP_KEY_ARG:
-        if (state->arg_num >= 2)
+        if (state->arg_num >= 3)
             /* Too many arguments. */
             argp_usage (state);
 
-	if(state->arg_num == 0)
+	if(state->arg_num == 0) {
+            if(arg[0] == 'e')
+                ps->encdec = ENCRYPT;
+            else
+                ps->encdec = DECRYPT;
+        } else if (state->arg_num == 1)
             ps->aes_string = arg;
 	else
             ps->key_string = arg;
@@ -313,6 +318,7 @@ void init_state(int argc, char* argv[], pstate* state)
     state->silent = 0;
     state->verbose = 0;
     state->padding = PKCS7;
+    state->encdec = ENCRYPT;
     state->output_file = "-";
 
     /* Parse our arguments; every option seen by parse_opt will
@@ -536,8 +542,7 @@ void file_setup(pstate* state, aes_t* transaction)
     // open file
     FILE* data_input = fopen(state->aes_string, "r");    
 
-    char buffer[4096] = {0}; // 1 page
-    // just doing 1 chunk for now
+    char buffer[PAGE_SIZE + CHUNK_SIZE] = {0}; // 1 page + 1 chunk in case of padding
     
     // check file
     if (data_input == 0) {
@@ -569,22 +574,39 @@ void file_setup(pstate* state, aes_t* transaction)
          for(int page = 0; page < pages; page++) {
              // Put stuff in Buffer
              int length = size >= PAGE_SIZE ? PAGE_SIZE : size; 
-             if(size < PAGE_SIZE) {
+             if(size < PAGE_SIZE) { // Last data
                 fread(buffer, 1, size, data_input);
-             } else {
+
+                // Padding
+                uint8_t padded_bytes = CHUNK_SIZE - (size % CHUNK_SIZE);
+                if( state->padding == PKCS7) { 
+                    // PKCS7 padding
+                    for(int i = 0; i < padded_bytes; i++) {
+                        buffer[size + i] = padded_bytes;
+                    }
+                    length += padded_bytes;
+                    transaction->chunks++;
+                } else { // No padding
+                    if(size % CHUNK_SIZE != 0) { // will have to pad last chunk
+                        transaction->chunks++;
+                        // do padding here
+                        for(int i = 0; i < padded_bytes; i++) {
+                            buffer[size + i] = 0;
+                        }
+                    }
+                }
+             } else { // read page
                 fread(buffer, 1, PAGE_SIZE, data_input);
                 size -= PAGE_SIZE;
              }
+
              // Write chunk to buffer for cdma
              for(int i=0; i < length/4; i++)  { // 4 32 bit words in a chunk
                  transaction->data[i + page*PAGE_SIZE/4] = htobe32(((uint32_t*)buffer)[i]);
              }
          }
          
-         // Padding
-         if(size % CHUNK_SIZE != 0) { // will have to pad last chunk
-            transaction->chunks++;
-         }
+         
 
          #ifdef DEBUG
              printf("finished writing\n");
@@ -680,11 +702,10 @@ int software_time(char* aes_out, pstate* state)
     /* printf("Time SW = %d ns\n", diff); */
     
     // Make sure encrypted text decrypts
-    char decrypt_out[80];
-    memset(aes_out, '\0', 33);
+    char decrypt_out[80], temp_string[80] = {0};
     decrypt_string(decrypt_out, state, enc_out);
-    print_aes(aes_out, (uint32_t*)decrypt_out, 1);
-    printf("Decrypted SW aes is: %s\n", aes_out);
+    print_aes(temp_string, (uint32_t*)decrypt_out, 1);
+    printf("Decrypted SW aes is: %s\n", temp_string);
 }
 
 // encrypt text
@@ -711,12 +732,12 @@ void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state,
     int compare = strcmp(hw_aes, sw_aes);
     if(compare != 0) {
         printf("SW and HW values not the same!!!\n");
-        exit(-1);
+        /* exit(-1); */
     } 
     #ifdef DEBUG 
-    else {
+        else {
             printf("SW and HW AES values the same :)\n");
-    }
+        }
     }
     
     int hw_nsecs = state->timer_value*10; // 100Mhz = 10 ns per 
@@ -726,6 +747,9 @@ void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state,
 
     #endif
 
+    #ifndef DEBUG
+    }
+    #endif
 }
 
 // *************************  Output File ******************************
@@ -804,6 +828,15 @@ void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size)
      address_set(state->cdma_addr, SA, src);   // Write source address
      address_set(state->cdma_addr, BTT, size); // Start transfer
      cdma_sync(state->cdma_addr);
+}
+
+// *************************  CDMA Transfer ******************************
+// Does cmda transfer from dest to src for size number of bytes
+
+int time_diff(struct timeval first, struct timeval last) {
+    // time again
+    return (last.tv_sec - first.tv_sec) * 100000 +
+    (last.tv_usec - first.tv_usec);
 }
 
 // *************************  COMPUTE INT LATENCY ***************************

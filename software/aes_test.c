@@ -25,8 +25,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <time.h>
 #include <sys/mman.h> 
 #include <sys/wait.h>
+#include <sys/time.h>
 #include <assert.h>
 #include <endian.h>
 #include <openssl/aes.h>
@@ -44,7 +46,7 @@ static const unsigned char key[] = {
 };
 
 unsigned char text_openssl[] = {
-        0x5b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96,
+        0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96,
         0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17, 0x2a
 };
 
@@ -53,6 +55,9 @@ unsigned char text_openssl[] = {
 // ***********************************************************************
 
 int main(int argc, char * argv[])   {
+    // Timevals
+    struct timeval t_start, t_setup, t_acc, t_end;
+    gettimeofday(&t_start, 0);    
     
     // Init state from program args
     pstate state;
@@ -109,6 +114,9 @@ int main(int argc, char * argv[])   {
 // ****************************************************************************
 // The main meat
 //
+    // Get time
+    gettimeofday(&t_setup, 0);    
+
     // Timer reset
     smb(GPIO_LED, GPIO_LED_NUM, 0x0); 
     smb(GPIO_LED, 0x5, 0x0);            // Clear error indicator
@@ -155,9 +163,14 @@ int main(int argc, char * argv[])   {
 
             // start AES
             /* address_set(state.acc_addr, SECOND_REG, ACC_MUX); */
-            address_set(state.acc_addr, FIRST_REG, 0x3);  // Enable aes conversion
-            address_set(state.acc_addr, FIRST_REG, 0x2);  // Turn off start
-                
+            if(state.encdec == DECRYPT) {
+                address_set(state.acc_addr, FIRST_REG, 0x3);  // Enable aes conversion
+                address_set(state.acc_addr, FIRST_REG, 0x2);  // Turn off start
+            } else { // encrypt
+                address_set(state.acc_addr, FIRST_REG, 0x0B);  // Enable aes conversion
+                address_set(state.acc_addr, FIRST_REG, 0x0A);  // Turn off start
+            }
+
             #ifdef DEBUG
                 printf("Exiting child process\n");
             #endif
@@ -173,9 +186,11 @@ int main(int argc, char * argv[])   {
             // ******************************************************
             // Check for interrupt 
             while (!get_det_int());
+            /* det_int = 0;                    // Clear interrupt detected flag */
         
             /* address_set(state.acc_addr, SECOND_REG, DMA_MUX); */
-            address_set(state.acc_addr, FIRST_REG, 0x02);       // Disable aes conversion
+            /* address_set(state.acc_addr, FIRST_REG, 0x02);       // Disable aes conversion */
+            address_set(state.acc_addr, FIRST_REG, 0x0A);       // Disable aes conversion
                                                                 // Set mux for bram
 
             // Timer Stop plus store value
@@ -188,51 +203,15 @@ int main(int argc, char * argv[])   {
                           (OCM + TRANSFER_SIZE(transaction.chunks)),  // Dest is ocm
                           (BRAM1 + TRANSFER_SIZE(transaction.chunks)),// Source is BRAM
                           TRANSFER_SIZE(transaction.chunks));
+
+            // get time again
+            gettimeofday(&t_acc, 0);
                
             #ifdef DEBUG
                 printf("CDMA write back done, printing result\n");
             #endif
                 
-            // Print value of ecb mode aes from hw
-            char aes[80] = {0};
-            print_aes(aes, &(state.ocm_addr[transaction.chunks]), 0);
-            printf("HW AES is: %s\n", aes);
-
-            if(state.output_file[0] != '-') {
-                #ifdef DEBUG
-                    printf("Output file writeback\n");
-                #endif
-                
-                output_file_stuff(&state, &transaction);
-                printf("Output file writeback\n");
-            }
-                
-            #ifdef DEBUG
-                printf("Calculating time, doing SW aes\n");
-            #endif
-             
-            // Calculate in sw and see time
-            if(state.mode == STRING) {
-                char sw_aes[80] = {0};
-                int diff = software_time(sw_aes, &state);
-            } else if (state.mode == FILE_MODE) {
-                // compare values and what not
-                char sw_aes[80] = {0};
-                /* int diff = software_time(sw_aes, &state); */
-                int diff = 1;
-                compare_aes_values(aes, sw_aes, &state, diff);
-            } else if(state.mode == TESTBENCH) {
-                char sw_aes[80] = {0};
-                // diff is in us
-                int diff = software_time(sw_aes, &state);
-                compare_aes_values(aes, sw_aes, &state, diff);
-            }
-
-            #ifdef DEBUG
-                printf("Done with calculations\n");
-            #endif
-                
-            /* det_int = 0;                    // Clear interrupt detected flag */
+               
             /* address_set(state.cdma_addr, CDMACR, 0x0000);  // Disable interrupts */
                 
         } // if chilpid ==0
@@ -244,8 +223,60 @@ int main(int argc, char * argv[])   {
         exit(0);
     } // if childpid >=0
     
+    // Print value of ecb mode aes from hw
+    char aes[80] = {0};
+    print_aes(aes, &(state.ocm_addr[transaction.chunks*4]), 0);
+    printf("HW AES is: %s\n", aes);
+
+    if(state.output_file[0] != '-') {
+        #ifdef DEBUG
+            printf("Output file writeback\n");
+        #endif
+        
+        output_file_stuff(&state, &transaction);
+        printf("Output file writeback\n");
+    }
+        
+    #ifdef DEBUG
+        printf("Calculating time, doing SW aes\n");
+    #endif
+     
+    // Calculate in sw and see time
+    if(state.mode == STRING) {
+        char sw_aes[80] = {0};
+        int diff = software_time(sw_aes, &state);
+    } else if (state.mode == FILE_MODE) {
+        // compare values and what not
+        char sw_aes[80] = {0};
+        /* int diff = software_time(sw_aes, &state); */
+        int diff = 1;
+        compare_aes_values(aes, sw_aes, &state, diff);
+    } else if(state.mode == TESTBENCH) {
+        char sw_aes[80] = {0};
+        // diff is in us
+        int diff = software_time(sw_aes, &state);
+        compare_aes_values(aes, sw_aes, &state, diff);
+    }
+
+    // Get time end
+    gettimeofday(&t_end, 0);
+    printf("\nTiming --------------\n" \
+           "Setup: %d us\n" \
+           "Acc:   %d us\n" \
+           "Out:   %d us\n", 
+            time_diff(t_start, t_setup), time_diff(t_setup, t_acc),
+            time_diff(t_acc, t_end));
+
+    #ifdef DEBUG
+        printf("Done with calculations\n");
+    #endif
+             
     // **************** UNMAP all open Memory Blocks *******************
     //
+
+    #ifdef DEBUG
+        printf("Unmapping addresses\n");
+    #endif
 EXIT:
     munmap(state.ocm_addr,65536);
     munmap(state.cdma_addr,4096);
