@@ -92,20 +92,23 @@ module AES_TOP(
 
     localparam
         INIT        = 0,
-        AES_READ1   = 1,
-        AES_READ2   = 2,
-        AES_READ3   = 3,
-        START_AES   = 4,
-        WAIT_AES    = 5,
-        START_AES2  = 6,
-        WAIT_AES2   = 7,
-        LOOP_AES    = 8,
-        WAIT_AES3   = 10,
-        HOLD        = 9,
-        AES_WRITE1  = 11,
-        AES_WRITE2  = 12,
-        AES_WRITE3  = 13;
-      
+        READ1       = 1,
+        READ2       = 2,
+        READ3       = 3,
+        START_AES1  = 4,
+        WAIT_AES1   = 5,
+        READ4       = 6,
+        READ5       = 7,
+        READ6       = 8,
+        START_AES2  = 9,
+        WAIT_AES2   = 10,
+        WRITE1      = 11,
+        WRITE2      = 12,
+        WRITE3      = 13,
+        WAIT_AES3   = 14,
+        WRITE4      = 15,
+        WRITE5      = 16,
+        WRITE6      = 17;
 
     // AES State Machine
     reg [3:0]   reg_num;
@@ -132,12 +135,14 @@ module AES_TOP(
             aes_bram_addr       <= 32'h0;
             aes_bram_addr_read  <= 32'h0;
             aes_bram_write_addr <= 32'h0;
+            aes_bram_write_data <= 32'h0;
             aes_data_valid      <= 1'h0;
             aes_data_valid_core2<= 1'h0;
             aes_loop_ctr        <= 32'h0;
             reg_num_nxt         <= 4'h0;
             write_reg_num_nxt   <= 4'b0;
             aes_start_read      <= 1'b0;
+            aes_start_write     <= 1'b0;
             aes_complete        <= 1'b0;
             NXT_STATE           <= INIT;
             old_aes_key         <= 256'h0;
@@ -150,155 +155,210 @@ module AES_TOP(
         // INIT STATE
         // RESET STATE
             if((STATE == INIT) && (axi_start_aes == 1'b1)) begin
+                if(old_aes_key != aes_key_input1 || old_aes_key == 256'h0) begin
+                    first_chunk <= 1'b1;
+                    old_aes_key <= aes_key_input1;
+                end else begin
+                    first_chunk <= 1'b0;
+                end
+                aes_complete <= 1'b0;       // Set interrupt low
+                NXT_STATE <= READ1;     // Start reading in blocks
+                aes_loop_ctr <= aes_num_chunks;
                 aes_bram_addr <= aes_bram_addr_start;
                 aes_bram_addr_read <= aes_bram_addr_start;
                 aes_bram_write_addr <= aes_bram_write_addr_start;
-                aes_complete <= 1'b0;
-                aes_loop_ctr <= aes_num_chunks;
-                NXT_STATE <= AES_READ1;
             end else if((STATE == INIT) && (axi_start_aes == 1'b0)) begin
                 NXT_STATE <= INIT;
                 aes_complete <= 1'b0;
             end 
             
         // AES_READ1
-        // start bram read
-            else if(STATE == AES_READ1) begin
+            else if(STATE == READ1) begin
+                first_chunk <= 1'b0;
                 aes_start_read <= 1'b1;
-                NXT_STATE <= AES_READ2;
+                NXT_STATE <= READ2;
                 read_bram_state <= read_bram_state + 1;
             end 
             
         // AES_READ2
         // read value
-            else if((STATE == AES_READ2) && (~bram_complete)) begin
-                NXT_STATE <= AES_READ2;
+            else if((STATE == READ2) && (~bram_complete)) begin
+                NXT_STATE <= READ2;
                 read_bram_state <= read_bram_state + 1;
-            end else if((STATE == AES_READ2) && (bram_complete)) begin
+            end else if((STATE == READ2) && (bram_complete)) begin
                 aes_start_read <= 1'b0;
-                if(reg_num < 4) begin
-                    block_reg_core1[reg_num] <= aes_bram_read_data;
-                end else begin
-                    block_reg_core2[reg_num] <= aes_bram_read_data;
-                end
-                NXT_STATE <= AES_READ3;
+                NXT_STATE <= READ3;
+                block_reg_core1[reg_num] <= aes_bram_read_data;
                 read_bram_state <= read_bram_state + 1;
             end 
             
         // AES_READ3
         // loop condition
-            else if((STATE == AES_READ3) && (reg_num[3:0] == 4'b0111)) begin
+            else if((STATE == READ3) && (reg_num[3:0] == 4'b0011)) begin
                 reg_num_nxt	<= 4'b0000;
+                NXT_STATE <= START_AES1;
                 read_bram_state <= read_bram_state + 1;
-                if(old_aes_key != aes_key_input1) begin
-                    NXT_STATE <= START_AES;
-                end else begin
-                    NXT_STATE <= START_AES2;
-                end
-            end else if((STATE == AES_READ3) && (reg_num[3:0] != 4'b0111)) begin
+            end else if((STATE == READ3) && (reg_num[3:0] != 4'b0011)) begin
                 reg_num_nxt	<= reg_num + 4'b0001;
                 aes_bram_addr <= aes_bram_addr_nxt + 32'h4;
                 aes_start_read <= 1'b1;
-                NXT_STATE <= AES_READ1;
+                NXT_STATE <= READ1;
                 read_bram_state <= read_bram_state + 1;
             end 
             
         // START_AES
-        // initialize keys for aes_core
-            else if((STATE == START_AES) && (aes_idle == 1'b1) && (aes_idle_core2 == 1'b1)) begin
-                first_chunk <= 1'b1;
-                NXT_STATE   <= WAIT_AES;
-                old_aes_key <= aes_key_input1;
+        // Wait for keys to finish initialization
+            else if((STATE == START_AES1) && (aes_idle == 1'b1)) begin
+                NXT_STATE <= WAIT_AES1;
                 aes_key_init_state <= aes_key_init_state + 1;
-            end else if((STATE == START_AES) && ((aes_idle == 1'b0) || (aes_idle_core2 == 1'b0))) begin
-                NXT_STATE <= START_AES;
+            end else if((STATE == START_AES1) && (aes_idle == 1'b0)) begin
+                NXT_STATE <= START_AES1;
                 aes_key_init_state <= aes_key_init_state + 1;
             end 
             
         // WAIT_AES
-        // wait for key to be set
-            else if((STATE == WAIT_AES) && ((aes_idle == 1'b0) || (aes_idle_core2 == 1'b0))) begin
-                NXT_STATE <= WAIT_AES;
-                first_chunk <= 1'b0;
+        // Start core 1
+            else if((STATE == WAIT_AES1) && (aes_idle == 1'b0)) begin
+                NXT_STATE <= WAIT_AES1;
                 aes_key_init_state <= aes_key_init_state + 1;
-            end else if((STATE == WAIT_AES) && (aes_idle == 1'b1) && (aes_idle_core2 == 1'b1)) begin
-                first_chunk <= 1'b0;
-                next_chunk  <= 1'b0;
-                next_chunk_core2 <= 1'b0;
-                NXT_STATE   <= START_AES2;
+            end else if((STATE == WAIT_AES1) && (aes_idle == 1'b1)) begin
+                next_chunk  <= 1'b1;
+                NXT_STATE   <= READ4;
                 aes_key_init_state <= aes_key_init_state + 1;
             end 
+
+        // READ4
+        // Start BRAM
+            else if((STATE == READ4)) begin
+                next_chunk <= 1'b0;
+                aes_start_read <= 1'b1;
+                reg_num_nxt <= 0;
+                NXT_STATE <= READ5;
+                read_bram_state <= read_bram_state + 1;
+            end
+        
+        // READ5
+        // read value
+            else if((STATE == READ5) && (~bram_complete)) begin
+                NXT_STATE <= READ5;
+                read_bram_state <= read_bram_state + 1;
+            end else if((STATE == READ5) && (bram_complete)) begin
+                aes_start_read <= 1'b0;
+                NXT_STATE <= READ6;
+                block_reg_core2[reg_num] <= aes_bram_read_data;
+                read_bram_state <= read_bram_state + 1;
+            end
             
+        // READ6
+        // loop
+            else if((STATE == READ6) && (reg_num[3:0] == 4'b0011)) begin
+                reg_num_nxt <= 4'b0000;
+                NXT_STATE <= START_AES2;
+                read_bram_state <= read_bram_state + 1;
+            end else if((STATE == READ6) && (reg_num[3:0] != 4'b0011)) begin
+                reg_num_nxt <= reg_num + 4'b0001;
+                aes_bram_addr <= aes_bram_addr_nxt + 32'h4;
+                aes_start_read <= 1'b1;
+                NXT_STATE <= READ4;
+                read_bram_state <= read_bram_state + 1;
+            end
+        
         // START_AES2
         // start conversion
-            else if((STATE == START_AES2) && (aes_idle == 1'b1) && (aes_idle_core2 == 1'b1)) begin
-                next_chunk <= 1'b1;
+            else if((STATE == START_AES2) && (aes_idle_core2 == 1'b1)) begin
                 next_chunk_core2 <= 1'b1;
                 NXT_STATE <= WAIT_AES2;
                 aes_key_init_state <= aes_key_init_state + 1;
-            end else if((STATE == START_AES2) && ((aes_idle == 1'b0) || (aes_idle_core2 == 1'b0))) begin
+            end else if((STATE == START_AES2) && (aes_idle_core2 == 1'b0)) begin
                 NXT_STATE <= START_AES2;
                 aes_key_init_state <= aes_key_init_state + 1;
             end 
             
         // WAIT_AES2
         // wait for conversion to finish
-            else if((STATE == WAIT_AES2) && ((aes_idle == 1'b0) || (aes_idle_core2 == 1'b0))) begin
+            else if((STATE == WAIT_AES2) && (aes_idle == 1'b0)) begin
                 NXT_STATE <= WAIT_AES2;
-                next_chunk <= 1'b0;
                 next_chunk_core2 <= 1'b0;
                 aes_process_state <= aes_process_state + 1;
-            end else if((STATE == WAIT_AES2) && (aes_idle == 1'b1) && (aes_idle_core2 == 1'b1)) begin
-                NXT_STATE <= WAIT_AES3;
-                next_chunk <= 1'b0;
+            end else if((STATE == WAIT_AES2) && (aes_idle == 1'b1) ) begin
+                NXT_STATE <= WRITE1;
                 next_chunk_core2 <= 1'b0;
                 aes_process_state <= aes_process_state + 1;
             end 
-            
-        // WAIT_AES3
-        // start writing
-            else if((STATE == WAIT_AES3) && ((aes_idle == 1'b0) || (aes_idle_core2 == 1'b0))) begin
-                NXT_STATE <= WAIT_AES3;
-                aes_process_state <= aes_process_state + 1;
-            end else if((STATE == WAIT_AES3) && (aes_idle == 1'b1) && (aes_idle_core2 == 1'b1)) begin
-                NXT_STATE <= AES_WRITE1;
-                //aes_complete <= 1'b1;
-                //aes_result_reg <= aes_result;
-                write_reg_core1[0] <= aes_result[127:96];
-                write_reg_core1[1] <= aes_result[95:64];
-                write_reg_core1[2] <= aes_result[63:32];
-                write_reg_core1[3] <= aes_result[31:0];
-                write_reg_core1[4] <= aes_result_core2[127:96];
-                write_reg_core1[5] <= aes_result_core2[95:64];
-                write_reg_core1[6] <= aes_result_core2[63:32];
-                write_reg_core1[7] <= aes_result_core2[31:0];
-                aes_bram_addr <= aes_bram_write_addr;
-                aes_process_state <= aes_process_state + 1;
-            end 
-            
-        // AES_WRITE1
-        // write out value
-            else if(STATE == AES_WRITE1) begin
+        
+        // WRITE1
+        // Starts WRITE1
+            else if (STATE == WRITE1) begin
                 aes_start_write <= 1'b1;
                 write_bram_state <= write_bram_state + 1;
                 
                 case(write_reg_num)
-                  0: begin
-                    aes_bram_write_data <= write_reg_core1[0];
-                  end
-                  
-                  1: begin
-                    aes_bram_write_data <= write_reg_core1[1];
-                  end
-                  
-                  2: begin
-                    aes_bram_write_data <= write_reg_core1[2];
-                  end
-                  
-                  3: begin
-                    aes_bram_write_data <= write_reg_core1[3];
-                  end
-                  
+                    0: begin
+                        aes_bram_write_data <= aes_result[127:96];
+                        write_reg_core1[1] <= aes_result[95:64];
+                        write_reg_core1[2] <= aes_result[63:32];
+                        write_reg_core1[3] <= aes_result[31:0];
+                    end
+                    
+                    1: begin
+                        aes_bram_write_data <= write_reg_core1[1];
+                    end
+                    
+                    2: begin
+                        aes_bram_write_data <= write_reg_core1[2];
+                    end
+                    
+                    3: begin
+                        aes_bram_write_data <= write_reg_core1[3];
+                    end
+                endcase
+                
+                NXT_STATE <= WRITE2;
+            end
+        
+        // WRITE2
+            else if ((STATE == WRITE2) && (~bram_complete)) begin
+                NXT_STATE <= WRITE2;
+                write_bram_state <= write_bram_state + 1;
+            end else if((STATE == WRITE2) && (bram_complete)) begin
+                aes_start_write <= 1'b0;
+                NXT_STATE <= WRITE3;
+                write_bram_state <= write_bram_state + 1;
+            end
+        
+        // WRITE3
+            else if ((STATE == WRITE3) && (write_reg_num[3:0] == 4'b0011)) begin
+                write_bram_state <= write_bram_state + 1;
+                NXT_STATE <= WAIT_AES3;
+            end else if((STATE == WRITE3) && (write_reg_num[3:0] != 4'b0011)) begin
+                write_bram_state <= write_bram_state + 1;
+                write_reg_num_nxt <= write_reg_num + 4'b0001;
+                aes_bram_addr <= aes_bram_addr_nxt + 32'h4;
+                NXT_STATE <= WRITE1;
+            end
+        
+        // WAIT_AES3
+        // start writing
+            else if((STATE == WAIT_AES3) && (aes_idle_core2 == 1'b0)) begin
+                NXT_STATE <= WAIT_AES3;
+                aes_process_state <= aes_process_state + 1;
+            end else if((STATE == WAIT_AES3) && (aes_idle_core2 == 1'b1)) begin
+                NXT_STATE <= WRITE4;
+                write_reg_num_nxt <= write_reg_num + 4'b0001;
+                write_reg_core1[4] <= aes_result_core2[127:96];
+                write_reg_core1[5] <= aes_result_core2[95:64];
+                write_reg_core1[6] <= aes_result_core2[63:32];
+                write_reg_core1[7] <= aes_result_core2[31:0];
+                //aes_bram_addr <= aes_bram_write_addr + 32'h10;
+                aes_process_state <= aes_process_state + 1;
+            end 
+            
+        // WRITE4
+            else if(STATE == WRITE4) begin
+                aes_start_write <=  1'b1;
+                write_bram_state <= write_bram_state + 1;
+                
+                case(write_reg_num)
                   4: begin
                     aes_bram_write_data <= write_reg_core1[4];
                   end
@@ -315,41 +375,39 @@ module AES_TOP(
                     aes_bram_write_data <= write_reg_core1[7];
                   end
                 endcase
-                NXT_STATE <= AES_WRITE2;
-            end 
-            
-        // AES_WRITE2
-        // wait for write to complete
-            else if((STATE == AES_WRITE2) && (~bram_complete)) begin
-                NXT_STATE <= AES_WRITE2;
+                NXT_STATE <= WRITE5;
+            end
+
+        // WRITE5
+            else if((STATE == WRITE5) && (~bram_complete)) begin
+                NXT_STATE <= WRITE5;
                 write_bram_state <= write_bram_state + 1;
-            end else if((STATE == AES_WRITE2) && (bram_complete)) begin
+            end else if((STATE == WRITE5) && (bram_complete)) begin
                 aes_start_write <= 1'b0;
-                NXT_STATE <= AES_WRITE3;
+                NXT_STATE <= WRITE6;
                 write_bram_state <= write_bram_state + 1;
-            end 
+            end
             
-        // AES_WRITE3
-        // finish writing and then loop back to next chunk
-            else if((STATE == AES_WRITE3) && (write_reg_num[3:0] == 4'b0111)) begin
+            
+        // WRITE6
+            else if((STATE == WRITE6) && (write_reg_num[3:0] == 4'b0111)) begin
                 write_bram_state <= write_bram_state + 1;
-                if (aes_loop_ctr > 32'b1) begin
+                if(aes_loop_ctr > 32'b1) begin
                     aes_loop_ctr <= aes_loop_ctr_nxt - 32'h1;
                     aes_bram_write_addr <= aes_bram_write_addr + 32'h10; //Move 1 chunk
                     aes_bram_addr <= aes_bram_addr_read_nxt + 32'h10;  
                     aes_bram_addr_read <= aes_bram_addr_read_nxt + 32'h10;
                     write_reg_num_nxt <= 4'h0;
-                    NXT_STATE <= AES_READ1;
+                    NXT_STATE <= READ1;
                 end else begin
                     NXT_STATE <= INIT;
                     aes_complete <= 1'b1;
                 end
-            end else if((STATE == AES_WRITE3) && (write_reg_num[3:0] != 4'b0111)) begin
+            end else if((STATE == WRITE6) && (write_reg_num[3:0] != 4'b0111)) begin
                 write_bram_state <= write_bram_state + 1;
                 write_reg_num_nxt <= write_reg_num + 4'b0001;
                 aes_bram_addr <= aes_bram_addr_nxt + 32'h4;
-                aes_start_write <= 1'b1;
-                NXT_STATE <= AES_WRITE1;
+                NXT_STATE <= WRITE4;
             end
         end
     end
@@ -383,7 +441,7 @@ module AES_TOP(
         .clk(aes_clk),
         .reset_n(aes_core_rst_n),
 
-        .encdec(1'b1),
+        .encdec(aes_encdec),
         .init(first_chunk),
         .next(next_chunk),
         .ready(aes_idle),

@@ -23,7 +23,6 @@
     output wire rst_BRAM,
     output wire[3:0] we_BRAM,
     output reg interrupt_out,
-    output wire aes_bus_control,
 
 		// User ports ends
 		// Do not modify the ports beyond this line
@@ -113,7 +112,6 @@
 	wire		aes_digest_valid;
 	wire		aes_complete;
 	wire   [31:0]  aes_bram_addr;
-    wire   [31:0]  aes_bram_write_addr;
 	wire   [255:0] aes_key_core1;
     
     // Profile Signals
@@ -759,9 +757,7 @@
                               slv_reg17, slv_reg18, slv_reg19, slv_reg20};
    
     assign aes_encdec = slv_reg0[3];
-   
-    assign aes_bus_control = slv_reg0[2];
-    
+
     assign axi_bram_addr   = slv_reg2;
     
     assign axi_bram_write_data = slv_reg4;
@@ -836,7 +832,6 @@
         .aes_start_read(aes_start_read),
         .aes_bram_addr(aes_bram_addr),
         .aes_bram_read_data(aes_bram_read_data),
-        .aes_bram_write_addr(aes_bram_write_addr),
         .aes_start_write(aes_start_write),
         .aes_bram_write_data(aes_bram_write_data),
         
