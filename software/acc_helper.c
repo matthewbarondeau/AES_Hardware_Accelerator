@@ -208,8 +208,15 @@ static volatile unsigned int det_int=0;     // Global flag that is volatile
 // getter for flag
 unsigned int get_det_int()
 {
-        return det_int;
+    return det_int;
 }
+
+// Reset flag
+void reset_det_int() 
+{
+    det_int = 0;
+}
+
 // interrupt handler (increments flag)
 void sighandler(int signo)
 {
@@ -228,7 +235,7 @@ void sighandler(int signo)
 
 // stuff for argp
 const char *argp_program_version =
-  "aes-test 0.2";
+  "aes-test 0.5";
 
 /* Program documentation. */
 static char doc[] =
@@ -244,6 +251,7 @@ static struct argp_option options[] = {
   {"testbench",'t', 0, 	    0,  "Use testbench inputs"},
   {"string",   's', 0,      0,  "Use string as key and data input" },
   {"file",     'f', 0,      0,  "Use file as key and data input"},
+  {"iv",       'i', "IV",   0,  "Initialization vector, also encrypts with CTR mode"},
   {"padding",  'p', "PADDING", 0, "Type of padding to use (no-padding, PKCS7)"},
   {"output",   'o', "FILE", 0,
    "Output to FILE instead of standard output" },
@@ -275,6 +283,9 @@ parse_opt (int key, char *arg, struct argp_state *state)
     case 'f':
 	ps->mode = FILE_MODE;
         break;
+    case 'i':
+        ps->iv_string = arg;
+        break;
     case 'p': 
         if(arg[0] == 'n') // no padding
             ps->padding = NO_PADDING;
@@ -288,7 +299,7 @@ parse_opt (int key, char *arg, struct argp_state *state)
             argp_usage (state);
 
 	if(state->arg_num == 0) {
-            if(arg[0] == 'e')
+            if(arg[0] == 'e' || arg[0] == 'E')
                 ps->encdec = ENCRYPT;
             else
                 ps->encdec = DECRYPT;
@@ -318,11 +329,12 @@ void init_state(int argc, char* argv[], pstate* state)
     state->silent = 0;
     state->verbose = 0;
     state->padding = PKCS7;
+    /* state->encdec = ENCRYPT; */
     state->encdec = ENCRYPT;
+    state->iv_string = "-"; // if iv_string == "-", program will use ecb mode
     state->output_file = "-";
 
-    /* Parse our arguments; every option seen by parse_opt will
-     be reflected in arguments. */
+    /* Parse the arguments */
     argp_parse (&argp, argc, argv, 0, 0, state);	
 
 }
@@ -519,7 +531,7 @@ void file_setup(pstate* state, aes_t* transaction)
     } else { 
          // read file
          #ifdef DEBUG
-            printf("Reading data file\n");
+            printf("Reading key file\n");
          #endif
          int index = 0;
          int c;
@@ -539,6 +551,75 @@ void file_setup(pstate* state, aes_t* transaction)
          // figure out size
     }
 
+    // write data this is going to be encrypted
+    if(strcmp(state->iv_string, "-") == 0) { // use ecb mode
+        write_aes_data(state, transaction, transaction->data);
+    } else { // CTR mode
+        ctr_mode_setup(state, transaction, transaction->data);    
+    }
+
+    // Write bram writeback as number of bytes
+    transaction->bram_addr = TRANSFER_SIZE(transaction->chunks);
+    transaction->writeback_bram_addr[0] = transaction->bram_addr;
+    
+}
+
+// Write aes data for counter mode
+void ctr_mode_setup(pstate* state, aes_t* transaction, uint32_t* output_addr) {
+    // check iv is correct length
+    uint8_t iv_bytes = strlen(state->iv_string);
+    if(strlen(state->iv_string) != 8) {
+        printf("Initilization vector is %d bytes," \
+               " but should be 8 bytes\n", iv_bytes);
+        exit(-1);
+    }
+
+    // Get iv setup
+    memcpy(transaction->init_vector.nonce, state->iv_string, iv_bytes);
+    transaction->init_vector.counter[1] = 0;
+    
+    // Get size of file (number of bytes to transfer)
+    unsigned int size;
+    struct stat buffer;
+    if(stat(state->aes_string, &buffer) == 0) {
+        // Size in buffer.st_size
+        size = buffer.st_size;
+        
+        // Round up
+        size = (size%CHUNK_SIZE == 0) ? size : size + 1;
+    } else {
+        printf("Could not open aes input file\n");
+        exit(-1);
+    }
+
+    // set chunks to correct value
+    transaction->chunks = size/CHUNK_SIZE;
+
+    // Add chunk for padding if necessary
+    if(size%CHUNK_SIZE != 0) {
+        transaction->chunks++;
+    }
+
+    #ifdef DEBUG
+        printf("Chunks: %d, bytes: %d\n", transaction->chunks, size);
+    #endif
+    
+    // Put in counter data for chunks
+    for(unsigned int chunk = 0; chunk < transaction->chunks; chunk++) {
+        // 4 32-bit words per chunk
+        output_addr[chunk*4] = htobe32(transaction->init_vector.nonce[0]);
+        output_addr[chunk*4 + 1] = htobe32(transaction->init_vector.nonce[1]);
+        output_addr[chunk*4 + 2] = transaction->init_vector.counter[0];
+        output_addr[chunk*4 + 3] = transaction->init_vector.counter[1];
+        transaction->init_vector.counter[1]++; // Increment counter
+    }
+}
+
+
+
+// Write aes data to address specified
+void write_aes_data(pstate* state, aes_t* transaction, uint32_t* output_addr)
+{
     // open file
     FILE* data_input = fopen(state->aes_string, "r");    
 
@@ -554,7 +635,7 @@ void file_setup(pstate* state, aes_t* transaction)
             printf("Reading data file\n");
          #endif
 
-         // try using fread
+         // Using fread
          long size, pages;
          fseek(data_input, 0, SEEK_END);
          size = ftell(data_input);
@@ -578,20 +659,27 @@ void file_setup(pstate* state, aes_t* transaction)
                 fread(buffer, 1, size, data_input);
 
                 // Padding
-                uint8_t padded_bytes = CHUNK_SIZE - (size % CHUNK_SIZE);
-                if( state->padding == PKCS7) { 
-                    // PKCS7 padding
-                    for(int i = 0; i < padded_bytes; i++) {
-                        buffer[size + i] = padded_bytes;
-                    }
-                    length += padded_bytes;
-                    transaction->chunks++;
-                } else { // No padding
-                    if(size % CHUNK_SIZE != 0) { // will have to pad last chunk
-                        transaction->chunks++;
-                        // do padding here
+                if(state->encdec == ENCRYPT) {
+                    uint8_t padded_bytes = CHUNK_SIZE - (size % CHUNK_SIZE);
+                    transaction->padded_bytes = padded_bytes;
+                    printf("Padding bytes: %d\n", padded_bytes);
+                    if( state->padding == PKCS7 && state->iv_string[0] == '-') { 
+                        // PKCS7 padding, ecb mode
                         for(int i = 0; i < padded_bytes; i++) {
-                            buffer[size + i] = 0;
+                            buffer[size + i] = padded_bytes;
+                        }
+                        length += padded_bytes;
+                        transaction->chunks++;
+                    } else { // No padding
+                        if(size % CHUNK_SIZE != 0) { // will have to pad last chunk
+                            if(state->iv_string[0] == '-') {
+                                transaction->chunks++;
+                            }
+                            // do padding here
+                            for(int i = 0; i < padded_bytes; i++) {
+                                buffer[size + i] = 0;
+                            }
+                            length += padded_bytes;
                         }
                     }
                 }
@@ -602,7 +690,7 @@ void file_setup(pstate* state, aes_t* transaction)
 
              // Write chunk to buffer for cdma
              for(int i=0; i < length/4; i++)  { // 4 32 bit words in a chunk
-                 transaction->data[i + page*PAGE_SIZE/4] = htobe32(((uint32_t*)buffer)[i]);
+                 output_addr[i + page*PAGE_SIZE/4] = htobe32(((uint32_t*)buffer)[i]);
              }
          }
          
@@ -615,11 +703,8 @@ void file_setup(pstate* state, aes_t* transaction)
          // Close file
          fclose(data_input);
 
-         transaction->bram_addr = TRANSFER_SIZE(transaction->chunks);
-         transaction->writeback_bram_addr[0] = transaction->bram_addr;
     }
 }
-
 
 // *************************  Testbench setup ***************************
 // Set key and chunk data to correct value 
@@ -651,11 +736,57 @@ void testbench_setup(aes_t* transaction)
     
     // Set number of chunks
     transaction->chunks = 2;
+    /* transaction->chunks = 1; */
 
     // Set BRAM addr chunks written back to
     transaction->bram_addr = TRANSFER_SIZE(transaction->chunks);
     transaction->writeback_bram_addr[0] = transaction->bram_addr;
 
+}
+
+// *************************  Start Acclerator ******************************
+// Starts accelerator
+
+void start_accelerator(pstate* state, aes_t* transaction) {
+	// setup aes, one for now
+	address_set(state->acc_addr, NUM_CHUNKS, transaction->chunks); // 1 chunk
+	address_set(state->acc_addr, START_ADDR, 0x0); // start addr for bram
+	address_set(state->acc_addr, FIRST_REG, 0x0);  // Reset aes unit
+
+	// start timer 
+	smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x1);     // Start timer
+	smb(GPIO_LED, GPIO_LED_NUM, 0x1);               // Turn on the LED
+
+	// start AES
+	/* address_set(state.acc_addr, SECOND_REG, ACC_MUX); */
+	if(state->encdec == DECRYPT && state->iv_string[0] == '-') {
+	    address_set(state->acc_addr, FIRST_REG, 0x3);  // Enable aes conversion
+	    address_set(state->acc_addr, FIRST_REG, 0x2);  // Turn off start
+            printf("Decrypting...\n");
+	} else { // encrypt
+	    address_set(state->acc_addr, FIRST_REG, 0x0B);  // Enable aes conversion
+	    address_set(state->acc_addr, FIRST_REG, 0x0A);  // Turn off start
+            printf("Encrypting...\n");
+	} 
+
+}
+
+// *************************  Start Acclerator ******************************
+// Starts accelerator
+
+void stop_accelerator(pstate* state, aes_t* transaction) {
+    /* address_set(state.acc_addr, SECOND_REG, DMA_MUX); */
+    if(state->encdec == DECRYPT) {
+        address_set(state->acc_addr, FIRST_REG, 0x02);  // Turn off start
+    } else { // encrypt
+        address_set(state->acc_addr, FIRST_REG, 0x0A);  // Turn off start
+    }    
+                                                        // Set mux for bram
+
+    // Timer Stop plus store value
+    state->timer_value = rm(GPIO_TIMER_VALUE);           // Read the timer value
+    smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x0);         // Disable timer
+    smb(GPIO_LED, GPIO_LED_NUM, 0x0);                   // Turn off the LED
 }
 
 // *************************  print_aes ******************************
@@ -786,19 +917,69 @@ void output_file_stuff(pstate* state, aes_t* transaction) {
          #ifdef DEBUG 
              printf("Chunks: %d, bytes: %lu, pages: %lu\n", 
                      transaction->chunks, size, pages);
-         #endif
+         #endif                    
+
+         // CTR mode, need to get input file
+         uint32_t *input_file;
+         uint32_t mode = state->iv_string[0] == '-' ? ECB_MODE : CTR_MODE;
+         if(mode == CTR_MODE) {
+             // get input file, need to allocate memory
+             printf("CTR Mode, getting input file\n");
+             input_file = (uint32_t*)malloc(size + CHUNK_SIZE); // anticipate extra chunk
+             write_aes_data(state, transaction, input_file); 
+             printf("First word of input file: 0x%08x\n", input_file[7]);
+         }
 
          for(int page = 0; page < pages; page++) {
              // Put stuff in Buffer
              int length = size > PAGE_SIZE ? PAGE_SIZE : size; 
 
              // Write chunk to buffer for cdma
-             for(int i=0; i < length/4; i++)  { // 4 32 bit words in a chunk
-                 buffer[i] = be32toh((encrypted_data)[i + page*(PAGE_SIZE/4)]);
+             if(mode == ECB_MODE) { // if here for less branches
+                 for(int i=0; i < length/4; i++)  { // 4 32 bit words in a chunk
+                     buffer[i] = be32toh((encrypted_data)[i + page*(PAGE_SIZE/4)]);
+                 }
+             } else { // CTR_MODE
+                for(int i=0; i < length/4; i++)  { // 4 32 bit words in a chunk
+                    uint32_t xor = encrypted_data[i + page*(PAGE_SIZE/4)]^
+                        input_file[i + page*(PAGE_SIZE/4)];
+            printf("Hex: : 0x%08x\n", input_file[i + page*(PAGE_SIZE/4)]);
+                    buffer[i] = be32toh(xor);
+                }
              }
              
-             // Write buffer to disk
+             // Write buffer to file 
              if(size < PAGE_SIZE) {
+                // Padding
+                if(state->encdec == DECRYPT) { // Only with decryption
+                    assert(size%CHUNK_SIZE == 0); // output should be chunks
+                    uint8_t num_bytes = ((uint8_t*)buffer)[size - 1];
+                    #ifdef DEBUG 
+                        printf("Number of padded bytes: %d\n", num_bytes);
+                    #endif
+
+                    // Verify bytes, not done in CTR mode
+                    if(state->padding == PKCS7 && mode == ECB_MODE) {
+                        for(unsigned int i = size-num_bytes; i < size; i++) {
+                            if(((uint8_t*)buffer)[i] != num_bytes) {
+                                printf("Incorrect PKCS7 padding, padding is" \
+                                       " %d\n", ((uint8_t*)buffer)[i]);
+				fclose(output_file);
+                                exit(-1);
+                            }
+                        }
+                        #ifdef DEBUG 
+                            printf("Verified padding\n");
+                        #endif   
+                    }
+
+                    // Modify size since you dont want to write padding
+                    size -= num_bytes;
+                } else if (mode == CTR_MODE) {
+                    // Modify size since you dont want to write padding
+                    size -= transaction->padded_bytes;
+                }
+                
                 fwrite(buffer, 1, size, output_file);
              } else {
                 fwrite(buffer, 1, PAGE_SIZE, output_file);
@@ -806,13 +987,11 @@ void output_file_stuff(pstate* state, aes_t* transaction) {
              }
          }
          
-         /* // Padding */
-         /* if(size % CHUNK_SIZE != 0) { // will have to pad last chunk */
-         /*    transaction->chunks++; */
-         /* } */
-
-         // Close file
+         // Close file and free memory
          fclose(output_file);
+         if(mode == CTR_MODE) {
+             free(input_file); 
+         }
 
          #ifdef DEBUG
              printf("finished writing\n");
