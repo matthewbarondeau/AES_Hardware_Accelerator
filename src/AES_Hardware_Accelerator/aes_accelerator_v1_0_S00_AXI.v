@@ -119,13 +119,6 @@
     wire  [31:0]    aes_process_state;
     wire  [31:0]    aes_key_init_state;
     wire  [31:0]    write_bram_state;
-    
-    // Debug Signals
-    wire  [127:0]   aes_core1_input_debug;
-    wire  [127:0]   aes_core2_input_debug;
-    wire  [127:0]   aes_result_core2_debug;
-    reg   [127:0]   debug_select;
-    wire  [1:0]     debug_selector;
 
 	// AXI4LITE signals
 	reg [C_S_AXI_ADDR_WIDTH-1 : 0] 	axi_awaddr;
@@ -727,12 +720,12 @@
 	        5'h16   : reg_data_out <= aes_process_state;
 	        5'h17   : reg_data_out <= aes_key_init_state;
 	        5'h18   : reg_data_out <= write_bram_state;
-	        5'h19   : reg_data_out <= debug_select[127:96];
-	        5'h1A   : reg_data_out <= debug_select[95:64];
-	        5'h1B   : reg_data_out <= debug_select[63:32];
-	        5'h1C   : reg_data_out <= debug_select[31:0];
+	        5'h19   : reg_data_out <= slv_reg25;
+	        5'h1A   : reg_data_out <= slv_reg26;
+	        5'h1B   : reg_data_out <= slv_reg27;
+	        5'h1C   : reg_data_out <= slv_reg28;
 	        5'h1D   : reg_data_out <= aes_bram_write_addr_start;
-	        5'h1E   : reg_data_out <= {30'h0, debug_selector};
+	        5'h1E   : reg_data_out <= slv_reg30;
 	        5'h1F   : reg_data_out <= slv_reg31;
 	        default : reg_data_out <= 0;
 	      endcase
@@ -777,17 +770,6 @@
     
     assign debug_selector = slv_reg30[1:0];
 
-    always @(*) begin
-        if(debug_selector == 2'b00) begin
-            debug_select = aes_core1_input_debug;
-        end else if (debug_selector == 2'b01) begin
-            debug_select = aes_core2_input_debug;
-        end else begin
-            debug_select = aes_result_core2_debug;
-        end
-    
-    end
-                           
     always @( posedge S_AXI_ACLK)
     begin
         if ( S_AXI_ARESETN == 1'b0 ) 
@@ -859,12 +841,8 @@
         .read_bram_state(read_bram_state),
         .aes_process_state(aes_process_state),
         .aes_key_init_state(aes_key_init_state),
-        .write_bram_state(write_bram_state),
-        
-        .aes_result_core2_debug(aes_result_core2_debug),
-        .aes_core1_input_debug(aes_core1_input_debug),
-        .aes_core2_input_debug(aes_core2_input_debug)
-         );
+        .write_bram_state(write_bram_state)
+        );
                     
 
      //**************************************
