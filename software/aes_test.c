@@ -75,8 +75,9 @@ int main(int argc, char * argv[])   {
     aes_t transaction = {
             .key = &(state.acc_addr[13]),       // Addr where key is stored
             .data = state.ocm_addr,             // Addr where data is stored
+            .bram_read = 0,                     // Assume at 0
+            .bram_write = TRANSFER_SIZE(1),      // actual bram address
             .writeback_bram_addr = &(state.acc_addr[29]), // writeback address
-            .bram_addr = TRANSFER_SIZE(1),      // actual bram address
             .chunks = 1
     };
 
@@ -125,8 +126,8 @@ int main(int argc, char * argv[])   {
     unsigned int bytes_left, pages, dma_length, transaction_size;
     transaction_size = transaction.chunks;
     bytes_left = TRANSFER_SIZE(transaction.chunks);
-    pages = bytes_left/PAGE_SIZE;
-    if(bytes_left%PAGE_SIZE) {
+    pages = bytes_left/DMA_MAX_SIZE;
+    if(bytes_left%DMA_MAX_SIZE) {
         pages++;
     }
 
@@ -135,20 +136,50 @@ int main(int argc, char * argv[])   {
                pages, transaction_size);
     #endif
 
+    // Transfer Data into BRAM form CDMA, do first chunk for double buffer
+    // RESET DMA
+    address_set(state.cdma_addr, CDMACR, 0x0004);	    
+
+    // Figure out transfer size for DMA
+    dma_length = bytes_left >= DMA_MAX_SIZE ? DMA_MAX_SIZE : bytes_left; 
+    if(bytes_left >= DMA_MAX_SIZE)
+            bytes_left -= DMA_MAX_SIZE;
+    
+    #ifdef DEBUG
+        printf("Starting cdma transfer for page: %d," \
+               " bytes: %d\n", 0, dma_length);
+    #endif
+
+    cdma_transfer(&state, 
+                  BRAM1, 
+                  OCM, 
+                  dma_length);
+
+    unsigned int first_chunk = 1;
+    unsigned int bram_read, bram_write, next_dma_length, next_bram_read;
+
+    // For look, goes throgh each page and starts accelerator, then DMA
     for(unsigned int page = 0; page < pages; page++) {
 
         // RESET DMA
         address_set(state.cdma_addr, CDMACR, 0x0004);	    
 
         // Figure out transfer size for DMA
-        dma_length = bytes_left >= PAGE_SIZE ? PAGE_SIZE : bytes_left; 
-        if(bytes_left >= PAGE_SIZE)
-            bytes_left -= PAGE_SIZE;
+        if(!first_chunk) {
+            dma_length = bytes_left >= DMA_MAX_SIZE ? DMA_MAX_SIZE : bytes_left; 
+            if(bytes_left >= DMA_MAX_SIZE)
+                bytes_left -= DMA_MAX_SIZE;
+        }
+
+        // Logically divide bram
+        // Bram is 64k, so split is 32k
+        bram_read = page&0x01 ? BRAM_HIGH : BRAM_LOW;
+        bram_write = bram_read + dma_length;
 
         // ********************************************************************
         // Fork off a child process to start the DMA process
         // 
-        #ifdef DEBUG 
+        #ifdef DEBUG_LOOP 
             printf("Fork\n");
         #endif
         
@@ -158,34 +189,43 @@ int main(int argc, char * argv[])   {
             // ****************************************************************
             // This code runs in the child process as the childpid == 0
             // 
-                
             if (childpid == 0)
             {
-                // Transfer Data into BRAM form CDMA
-                #ifdef DEBUG
-                    printf("Starting cdma transfer for page: %d," \
-                           " bytes: %d\n", page, dma_length);
-                #endif
-
-                cdma_transfer(&state, 
-                              BRAM1, 
-                              OCM + page*PAGE_SIZE, 
-                              dma_length);
-                   
                 // Write bram writeback as number of bytes
                 transaction.chunks = dma_length/CHUNK_SIZE;
-                transaction.bram_addr = dma_length;
-                transaction.writeback_bram_addr[0] = dma_length;
+                transaction.bram_read = bram_read;
+                transaction.bram_write = bram_write;
+                *transaction.writeback_bram_addr = bram_write;
 
-                #ifdef DEBUG
+                #ifdef DEBUG_LOOP
                     printf("CDMA done, starting accelerator now\n");
                 #endif
    
                 start_accelerator(&state, &transaction);            
 
-		#ifdef DEBUG
+		#ifdef DEBUG_LOOP
                     printf("Exiting child process\n");
                 #endif
+
+                first_chunk = 0;
+
+                if(page < pages - 1) { // More pages to transfer
+                    // Transfer Data into BRAM form CDMA
+                    next_dma_length = bytes_left >= DMA_MAX_SIZE ? 
+                                                   DMA_MAX_SIZE : bytes_left;       
+                    next_bram_read = (page+1)&0x01 ? 
+                                                  BRAM_HIGH : BRAM_LOW;
+        
+                    #ifdef DEBUG_LOOP
+                        printf("Starting cdma transfer for page: %d," \
+                               " bytes: %d\n", page + 1, next_dma_length);
+                    #endif
+
+                    cdma_transfer(&state, 
+                                  BRAM1 + next_bram_read, 
+                                  OCM + (page + 1)*DMA_MAX_SIZE, 
+                                  next_dma_length);
+                }
 
                 exit(0);  // Exit the child process
             }
@@ -200,18 +240,18 @@ int main(int argc, char * argv[])   {
                 while (!get_det_int());
                 reset_det_int();
                 
-                stop_accelerator(&state, &transaction);
+                stop_accelerator(&state, &transaction); // also gets timer values
                             
                 // do cmda read back
                 cdma_transfer(&state,
                               (OCM + TRANSFER_SIZE(transaction_size) + 
-                               page*PAGE_SIZE),  // Dest is ocm
-                              (BRAM1 + transaction.bram_addr),// Source is BRAM
+                               page*DMA_MAX_SIZE),  // Dest is ocm
+                              (BRAM1 + transaction.bram_write),// Source is BRAM
                               dma_length);
 
-                #ifdef DEBUG
+                #ifdef DEBUG_LOOP
                     printf("CDMA write back done at addr: 0x%08x\n",
-                           OCM + TRANSFER_SIZE(transaction_size) + page*PAGE_SIZE);
+                           OCM + TRANSFER_SIZE(transaction_size) + page*DMA_MAX_SIZE);
                 #endif
                    
             } // if chilpid ==0
@@ -241,34 +281,31 @@ int main(int argc, char * argv[])   {
         #endif
         
         output_file_stuff(&state, &transaction);
-        printf("Output file writeback\n");
     }
-        
-    #ifdef DEBUG
+
+    if(state.verbose == 1) {        
+         // Print value of ecb mode aes from hw
+        char aes[80] = {0};
+        print_aes(aes, &(state.ocm_addr[transaction.chunks*4]), 0);
+        printf("HW AES is: %s\n", aes);
         printf("Calculating time, doing SW aes\n");
-    #endif
 
-    // Print value of ecb mode aes from hw
-    char aes[80] = {0};
-    print_aes(aes, &(state.ocm_addr[transaction.chunks*4]), 0);
-    printf("HW AES is: %s\n", aes);
-
-
-    // Calculate in sw and see time
-    if(state.mode == STRING) {
-        char sw_aes[80] = {0};
-        int diff = software_time(sw_aes, &state);
-    } else if (state.mode == FILE_MODE) {
-        // compare values and what not
-        char sw_aes[80] = {0};
-        /* int diff = software_time(sw_aes, &state); */
-        int diff = 1;
-        compare_aes_values(aes, sw_aes, &state, diff);
-    } else if(state.mode == TESTBENCH) {
-        char sw_aes[80] = {0};
-        // diff is in us
-        int diff = software_time(sw_aes, &state);
-        compare_aes_values(aes, sw_aes, &state, diff);
+        // Calculate in sw and see time
+        if(state.mode == STRING) {
+            char sw_aes[80] = {0};
+            int diff = software_time(sw_aes, &state);
+        } else if (state.mode == FILE_MODE) {
+            // compare values and what not
+            char sw_aes[80] = {0};
+            /* int diff = software_time(sw_aes, &state); */
+            int diff = 1;
+            compare_aes_values(aes, sw_aes, &state, diff);
+        } else if(state.mode == TESTBENCH) {
+            char sw_aes[80] = {0};
+            // diff is in us
+            int diff = software_time(sw_aes, &state);
+            compare_aes_values(aes, sw_aes, &state, diff);
+        }
     }
 
     // Get time end
@@ -276,9 +313,12 @@ int main(int argc, char * argv[])   {
     printf("\nTiming --------------\n" \
            "Setup: %d us\n" \
            "Acc:   %d us\n" \
+           "Timer: %d ns\n" \
            "Out:   %d us\n", 
             time_diff(t_start, t_setup), time_diff(t_setup, t_acc),
-            time_diff(t_acc, t_end));
+            state.timer_value*10, time_diff(t_acc, t_end)); // Timer value with 100MHz
+                                                               // clock
+
 
     #ifdef DEBUG
         printf("Done with calculations\n");
@@ -291,10 +331,9 @@ int main(int argc, char * argv[])   {
         printf("Unmapping addresses\n");
     #endif
 EXIT:
-    /* munmap(state.ocm_addr,65536); */
-    munmap(state.ocm_addr,131072);
+    munmap(state.ocm_addr,262142);
     munmap(state.cdma_addr,4096);
-    munmap(state.bram_addr,4096);
+    /* munmap(state.bram_addr,4096); */
     munmap(state.acc_addr, 4096);
     return 0; 
     

@@ -424,12 +424,13 @@ void mm_setup(pstate* state)
         printf("Getting ready to mmap BRAM_virtual_address \n");    
     #endif
         
-    state->bram_addr = mmap(NULL, 
-                            4096, 
-                            PROT_READ | PROT_WRITE, 
-                            MAP_SHARED, 
-                            dh, 
-                            BRAM0); // Memory map AXI Lite register block
+    /* state->bram_addr = mmap(NULL, */ 
+    /*                         4096, */ 
+    /*                         PROT_READ | PROT_WRITE, */ 
+    /*                         MAP_SHARED, */ 
+    /*                         dh, */ 
+    /*                         BRAM0); // Memory map AXI Lite register block */
+
     #ifdef DEBUG1        
         printf("BRAM_virtual_address = 0x%.8x\n", BRAM_virtual_address); 
     #endif                                    
@@ -444,8 +445,7 @@ void mm_setup(pstate* state)
 
     // Set up the OCM with data to be transferred to the BRAM
     state->ocm_addr = mmap(NULL, 
-                           /* 65536, // only 64k bytes */ 
-                           131072,
+                           262142, // map all 256k ocm
                            PROT_READ | PROT_WRITE, 
                            MAP_SHARED, 
                            dh, 
@@ -517,7 +517,7 @@ void string_setup(pstate* state, aes_t* transaction)
         transaction->data[i] = htobe32(((uint32_t*)buffer)[i]);
     }
 
-    *(transaction->writeback_bram_addr) = transaction->bram_addr;
+    *(transaction->writeback_bram_addr) = transaction->bram_write;
 
 }
 
@@ -564,8 +564,8 @@ void file_setup(pstate* state, aes_t* transaction)
     }
 
     // Write bram writeback as number of bytes
-    transaction->bram_addr = TRANSFER_SIZE(transaction->chunks);
-    transaction->writeback_bram_addr[0] = transaction->bram_addr;
+    transaction->bram_write = TRANSFER_SIZE(transaction->chunks);
+    transaction->writeback_bram_addr[0] = transaction->bram_write;
     
 }
 
@@ -667,7 +667,9 @@ void write_aes_data(pstate* state, aes_t* transaction, uint32_t* output_addr)
                 if(state->encdec == ENCRYPT) {
                     uint8_t padded_bytes = CHUNK_SIZE - (size % CHUNK_SIZE);
                     transaction->padded_bytes = padded_bytes;
-                    printf("Padding bytes: %d\n", padded_bytes);
+                    #ifdef DEBUG 
+                        printf("Padding bytes: %d\n", padded_bytes);
+                    #endif
                     if( state->padding == PKCS7 && state->iv_string[0] == '-') { 
                         // PKCS7 padding, ecb mode
                         for(int i = 0; i < padded_bytes; i++) {
@@ -744,8 +746,8 @@ void testbench_setup(aes_t* transaction)
     /* transaction->chunks = 1; */
 
     // Set BRAM addr chunks written back to
-    transaction->bram_addr = TRANSFER_SIZE(transaction->chunks);
-    transaction->writeback_bram_addr[0] = transaction->bram_addr;
+    transaction->bram_write = TRANSFER_SIZE(transaction->chunks);
+    transaction->writeback_bram_addr[0] = transaction->bram_write;
 
 }
 
@@ -753,9 +755,10 @@ void testbench_setup(aes_t* transaction)
 // Starts accelerator
 
 void start_accelerator(pstate* state, aes_t* transaction) {
-	// setup aes, one for now
+	// Setup AES 
 	address_set(state->acc_addr, NUM_CHUNKS, transaction->chunks); // 1 chunk
-	address_set(state->acc_addr, START_ADDR, 0x0); // start addr for bram
+	address_set(state->acc_addr, START_ADDR, transaction->bram_read); // start addr 
+                                                                          // for bram
 	address_set(state->acc_addr, FIRST_REG, 0x0);  // Reset aes unit
 
 	// start timer 
@@ -763,15 +766,18 @@ void start_accelerator(pstate* state, aes_t* transaction) {
 	smb(GPIO_LED, GPIO_LED_NUM, 0x1);               // Turn on the LED
 
 	// start AES
-	/* address_set(state.acc_addr, SECOND_REG, ACC_MUX); */
 	if(state->encdec == DECRYPT && state->iv_string[0] == '-') {
 	    address_set(state->acc_addr, FIRST_REG, 0x3);  // Enable aes conversion
 	    address_set(state->acc_addr, FIRST_REG, 0x2);  // Turn off start
-            printf("Decrypting...\n");
+            #ifdef DEBUG_LOOP
+                printf("Decrypting...\n");
+            #endif
 	} else { // encrypt
 	    address_set(state->acc_addr, FIRST_REG, 0x0B);  // Enable aes conversion
 	    address_set(state->acc_addr, FIRST_REG, 0x0A);  // Turn off start
-            printf("Encrypting...\n");
+            #ifdef DEBUG_LOOP
+                printf("Encrypting...\n");
+            #endif
 	} 
 
 }
@@ -878,7 +884,7 @@ void compare_aes_values(char* hw_aes, char* sw_aes, pstate* state,
     
     int hw_nsecs = state->timer_value*10; // 100Mhz = 10 ns per 
     int sw_nsecs = diff;
-    printf("Time HW =  %d ns\n", state->timer_value*13);
+    printf("Time HW =  %d ns\n", state->timer_value*10);
     printf("Speedup: %d\n", sw_nsecs/hw_nsecs);
 
     #endif
@@ -988,11 +994,12 @@ void output_file_stuff(pstate* state, aes_t* transaction) {
                     size -= num_bytes;
                 } else if (mode == CTR_MODE) {
                     // Modify size since you dont want to write padding
-                    size -= transaction->padded_bytes;
+                    if(transaction->padded_bytes != 0x10) {
+                        size -= transaction->padded_bytes;
+                    }
                 }
                 
                 fwrite(buffer, 1, size, output_file);
-                printf("Size: %d\n", size);
              } else {
                 fwrite(buffer, 1, PAGE_SIZE, output_file);
                 size -= PAGE_SIZE;
@@ -1015,6 +1022,7 @@ void output_file_stuff(pstate* state, aes_t* transaction) {
 // Does cmda transfer from dest to src for size number of bytes
 void cdma_transfer(pstate* state, unsigned int dest, unsigned int src, int size)
 {
+     /* cdma_sync(state->cdma_addr); // dont start while transaction is happening */
      address_set(state->cdma_addr, DA, dest); // Write destination address
      address_set(state->cdma_addr, SA, src);   // Write source address
      address_set(state->cdma_addr, BTT, size); // Start transfer

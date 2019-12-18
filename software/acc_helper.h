@@ -9,15 +9,19 @@
 // ******************************************************************** 
 // Debug defines
 #undef DEBUG 
+#undef DEBUG_LOOP
 #undef DEBUG1
 #undef DEBUG2
 #undef DEBUG_BRAM
-#define DEBUG            // Comment out to turn off debug messages
+/* #define DEBUG            // Comment out to turn off debug messages */
+/* #define DEBUG_LOOP */
 /* #define DEBUG1           // Comment out to turn off debug messages */
 /* #define DEBUG2 */
 /* #define DEBUG_BRAM */
 
 #define PAGE_SIZE 4096
+/* #define DMA_MAX_SIZE 16384 */
+#define DMA_MAX_SIZE 8192
 
 // ******************************************************************** 
 // Memomoy Map
@@ -26,7 +30,9 @@
 #define BRAM1               0x40000000
 #define ACC                 0x44000000
 #define OCM                 0xFFFC0000
-/* #define OCM                 0xFFF00000 */
+
+#define BRAM_LOW            0x00000000
+#define BRAM_HIGH           0x00008000
 
 // ******************************************************************** 
 // Regs for CDMA
@@ -111,7 +117,8 @@ typedef struct aes_transaction {
         uint32_t*       key;
         uint32_t*       data;
         uint32_t*       writeback_bram_addr;
-        uint32_t        bram_addr;
+        uint32_t        bram_read;
+        uint32_t        bram_write;
         uint32_t        chunks;
         uint8_t         padded_bytes;
         iv_t            init_vector;
