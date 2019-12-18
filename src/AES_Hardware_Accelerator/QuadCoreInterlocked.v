@@ -116,9 +116,8 @@ module AES_TOP(
         START_AES1  = 5,
         CHECK_AES1  = 6,
         WRITE1      = 7,
-        WRITE2      = 8,
-        WRITE3      = 9,
-        WAIT_AES2   = 10;
+        WRITE2`     = 8,
+        WRITE3      = 9;
 
     // AES State Machine
     reg [3:0]   reg_num;
@@ -127,7 +126,7 @@ module AES_TOP(
     reg [3:0]   write_reg_num_nxt;
     reg [7:0]   debug_1;
 
-    always @( posedge aes_clk or negedge aes_rst_n) 
+    always @( posedge aes_clk) 
     begin : reg_reset
     integer i;
         if(aes_rst_n == 1'b0) begin
@@ -233,9 +232,6 @@ module AES_TOP(
                 NXT_STATE <= WAIT_AES1;
                 aes_key_init_state <= aes_key_init_state + 1;
             end 
-        
-
-        
 
         // START_AES1
         // Start AES_CORE1
@@ -247,18 +243,9 @@ module AES_TOP(
                 next_chunk_core2 <= 1'b1;
                 next_chunk_core3 <= 1'b1;
                 next_chunk_core4 <= 1'b1;
-                NXT_STATE   <= WAIT_AES2;
+                NXT_STATE   <= CHECK_AES1;
                 reg_num_nxt <= reg_num + 1;
                 aes_key_init_state <= aes_key_init_state + 1;
-            end 
-            
-        // WAIT_AES2
-            else if(STATE == WAIT_AES2) begin
-                NXT_STATE <= CHECK_AES1;
-                next_chunk_core1 <= 1'b0;
-                next_chunk_core2 <= 1'b0;
-                next_chunk_core3 <= 1'b0;
-                next_chunk_core4 <= 1'b0;
             end 
 
         // CHECK_AES1
