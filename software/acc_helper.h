@@ -55,6 +55,9 @@
 #define DMA_MUX             0x00
 #define ACC_MUX             0x04
 
+#define ECB_MODE            0x00
+#define CTR_MODE            0x01
+
 // ******************************************************************** 
 // Device path name for the GPIO device
 
@@ -81,6 +84,7 @@ typedef enum padding_mode {
 typedef struct program_state {
         char*           aes_string;
         char*           key_string;
+        char*           iv_string;
         char*           output_file;
         pmode           mode;
         padding_t       padding;
@@ -97,12 +101,19 @@ typedef struct program_state {
 // ***************  Struct for AES transaction  ******************
 //
 
+typedef struct iv {
+    uint32_t            nonce[2] ; //
+    uint32_t            counter[2] ;
+} iv_t;
+
 typedef struct aes_transaction {
         uint32_t*       key;
         uint32_t*       data;
         uint32_t*       writeback_bram_addr;
         uint32_t        bram_addr;
         uint32_t        chunks;
+        uint8_t         padded_bytes;
+        iv_t            init_vector;
 } aes_t;
 
 // ************************  FUNCTION PROTOTYPES ***********************
@@ -123,6 +134,8 @@ unsigned int dma_get(unsigned int* dma_virtual_address, int offset);
 int cdma_sync(unsigned int* dma_virtual_address);
 // Gettter for det_int flag
 unsigned int get_det_int();
+// Reset int flag
+void reset_det_int();
 // Signal handler for interrupt
 void sighandler(int signo);
 
@@ -137,8 +150,16 @@ void mm_setup(pstate* state);
 void string_setup(pstate* state, aes_t* transaction);
 // Setup File mode memory
 void file_setup(pstate* state, aes_t* transaction);
+// CTR setup
+void ctr_mode_setup(pstate* state, aes_t* transaction, uint32_t* output_addr);
+// Write file to address
+void write_aes_data(pstate* state, aes_t* transaction, uint32_t* output_addr);
 // Setup Testbench memory
 void testbench_setup(aes_t* transaction);
+// Start accelerator
+void start_accelerator(pstate* state, aes_t* transaction);
+// Stop Accelerator
+void stop_accelerator(pstate* state, aes_t* transaction);
 // For printing AES values
 void print_aes(char *aes, uint32_t *encrypt, int endian_switch);
 // Test SW time

@@ -121,113 +121,120 @@ int main(int argc, char * argv[])   {
     smb(GPIO_LED, GPIO_LED_NUM, 0x0); 
     smb(GPIO_LED, 0x5, 0x0);            // Clear error indicator
 
-    // RESET DMA
-    address_set(state.cdma_addr, CDMACR, 0x0004);	    
+    // Figure out number of pages 
+    unsigned int bytes_left, pages, dma_length;
+    bytes_left = TRANSFER_SIZE(transaction.chunks);
+    pages = bytes_left/PAGE_SIZE;
+    if(bytes_left%PAGE_SIZE) {
+        pages++;
+    }
+    printf("Pages to transfer: %d\n", pages);
 
-    // ********************************************************************
-    // Fork off a child process to start the DMA process
-    // 
-    #ifdef DEBUG 
-        printf("Fork\n");
-    #endif
-    
-    pid_t childpid = vfork();     // Need to use vfork to prevent race condition
-    if (childpid >=0)       // Fork suceeded    
-    {
-        // ****************************************************************
-        // This code runs in the child process as the childpid == 0
+    for(unsigned int page = 0; page < pages; page++) {
+
+        // RESET DMA
+        address_set(state.cdma_addr, CDMACR, 0x0004);	    
+
+        // Figure out transfer size for DMA
+        dma_length = bytes_left >= PAGE_SIZE ? PAGE_SIZE : bytes_left; 
+        if(bytes_left >= PAGE_SIZE)
+            bytes_left -= PAGE_SIZE;
+
+        // ********************************************************************
+        // Fork off a child process to start the DMA process
         // 
-            
-        if (childpid == 0)
-        {
-            // Transfer Data into BRAM form CDMA
-            #ifdef DEBUG
-                printf("Starting cdma transfer\n");
-            #endif
-
-            /* address_set(state.acc_addr, SECOND_REG, DMA_MUX);  // Set mux for bram */ 
-            cdma_transfer(&state, BRAM1, OCM, TRANSFER_SIZE(transaction.chunks));
-               
-            #ifdef DEBUG
-                printf("CDMA done, starting accelerator now\n");
-            #endif
-
-            // setup aes, one for now
-            address_set(state.acc_addr, NUM_CHUNKS, transaction.chunks); // 1 chunk
-            address_set(state.acc_addr, START_ADDR, 0x0); // start addr for bram
-            address_set(state.acc_addr, FIRST_REG, 0x0);  // Reset aes unit
-
-            // start timer 
-            smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x1);     // Start timer
-            smb(GPIO_LED, GPIO_LED_NUM, 0x1);               // Turn on the LED
-
-            // start AES
-            /* address_set(state.acc_addr, SECOND_REG, ACC_MUX); */
-            if(state.encdec == DECRYPT) {
-                address_set(state.acc_addr, FIRST_REG, 0x3);  // Enable aes conversion
-                address_set(state.acc_addr, FIRST_REG, 0x2);  // Turn off start
-            } else { // encrypt
-                address_set(state.acc_addr, FIRST_REG, 0x0B);  // Enable aes conversion
-                address_set(state.acc_addr, FIRST_REG, 0x0A);  // Turn off start
-            }
-
-            #ifdef DEBUG
-                printf("Exiting child process\n");
-            #endif
-
-            exit(0);  // Exit the child process
-        }
-            
-        // ***********************************************************
-        // This code runs in the parent process as the childpid != 0
-        // 
-        else 
-        {
-            // ******************************************************
-            // Check for interrupt 
-            while (!get_det_int());
-            /* det_int = 0;                    // Clear interrupt detected flag */
+        #ifdef DEBUG 
+            printf("Fork\n");
+        #endif
         
-            /* address_set(state.acc_addr, SECOND_REG, DMA_MUX); */
-            /* address_set(state.acc_addr, FIRST_REG, 0x02);       // Disable aes conversion */
-            address_set(state.acc_addr, FIRST_REG, 0x0A);       // Disable aes conversion
-                                                                // Set mux for bram
-
-            // Timer Stop plus store value
-            state.timer_value = rm(GPIO_TIMER_VALUE);           // Read the timer value
-            smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x0);         // Disable timer
-            smb(GPIO_LED, GPIO_LED_NUM, 0x0);                   // Turn off the LED
-
-            // do cmda read back
-            cdma_transfer(&state,
-                          (OCM + TRANSFER_SIZE(transaction.chunks)),  // Dest is ocm
-                          (BRAM1 + TRANSFER_SIZE(transaction.chunks)),// Source is BRAM
-                          TRANSFER_SIZE(transaction.chunks));
-
-            // get time again
-            gettimeofday(&t_acc, 0);
-               
-            #ifdef DEBUG
-                printf("CDMA write back done, printing result\n");
-            #endif
+        pid_t childpid = vfork();     // Need to use vfork to prevent race condition
+        if (childpid >=0)       // Fork suceeded    
+        {
+            // ****************************************************************
+            // This code runs in the child process as the childpid == 0
+            // 
                 
-               
-            /* address_set(state.cdma_addr, CDMACR, 0x0000);  // Disable interrupts */
-                
-        } // if chilpid ==0
-    } // if childpid >=0
+            if (childpid == 0)
+            {
+                // Transfer Data into BRAM form CDMA
+                #ifdef DEBUG
+                    printf("Starting cdma transfer for page: %d," \
+                           " bytes: %d\n", page, dma_length);
+                #endif
 
-    else  // fork failed
-    {
-        perror("Fork failed");
-        exit(0);
-    } // if childpid >=0
+                cdma_transfer(&state, BRAM1, OCM, dma_length);
+                   
+                #ifdef DEBUG
+                    printf("CDMA done, starting accelerator now\n");
+                #endif
+   
+                start_accelerator(&state, &transaction);            
+		   /* // setup aes, one for now */
+		/* address_set(state.acc_addr, NUM_CHUNKS, transaction.chunks); // 1 chunk */
+		/* address_set(state.acc_addr, START_ADDR, 0x0); // start addr for bram */
+		/* address_set(state.acc_addr, FIRST_REG, 0x0);  // Reset aes unit */
+
+		/* // start timer */ 
+		/* smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x1);     // Start timer */
+		/* smb(GPIO_LED, GPIO_LED_NUM, 0x1);               // Turn on the LED */
+
+		/* // start AES */
+		/* /1* address_set(state.acc_addr, SECOND_REG, ACC_MUX); *1/ */
+		/* if(state.encdec == DECRYPT) { */
+		   /*  address_set(state.acc_addr, FIRST_REG, 0x3);  // Enable aes conversion */
+		   /*  address_set(state.acc_addr, FIRST_REG, 0x2);  // Turn off start */
+		/* } else { // encrypt */
+		   /*  address_set(state.acc_addr, FIRST_REG, 0x0B);  // Enable aes conversion */
+		   /*  address_set(state.acc_addr, FIRST_REG, 0x0A);  // Turn off start */
+		/* } */ 
+
+                #ifdef DEBUG
+                    printf("Exiting child process\n");
+                #endif
+
+                exit(0);  // Exit the child process
+            }
+                
+            // ***********************************************************
+            // This code runs in the parent process as the childpid != 0
+            // 
+            else 
+            {
+                // ******************************************************
+                // Check for interrupt 
+                while (!get_det_int());
+                /* reset_det_int(); */
+                
+                stop_accelerator(&state, &transaction);
+                            
+                // do cmda read back
+                cdma_transfer(&state,
+                              (OCM + TRANSFER_SIZE(transaction.chunks)),  // Dest is ocm
+                              (BRAM1 + TRANSFER_SIZE(transaction.chunks)),// Source is BRAM
+                              dma_length);
+
+                #ifdef DEBUG
+                    printf("CDMA write back done, printing result\n");
+                #endif
+                   
+            } // if chilpid ==0
+        } // if childpid >=0
+
+        else  // fork failed
+        {
+            perror("Fork failed");
+            exit(0);
+        } // if childpid >=0
+    }
+
+    // ***********************************************************
+    // Accelerator part is done, just put data back and look at timing
+    // 
     
-    // Print value of ecb mode aes from hw
-    char aes[80] = {0};
-    print_aes(aes, &(state.ocm_addr[transaction.chunks*4]), 0);
-    printf("HW AES is: %s\n", aes);
-
+    // Get time again
+    gettimeofday(&t_acc, 0);
+             
+    // Output file
     if(state.output_file[0] != '-') {
         #ifdef DEBUG
             printf("Output file writeback\n");
@@ -240,7 +247,13 @@ int main(int argc, char * argv[])   {
     #ifdef DEBUG
         printf("Calculating time, doing SW aes\n");
     #endif
-     
+
+    // Print value of ecb mode aes from hw
+    char aes[80] = {0};
+    print_aes(aes, &(state.ocm_addr[transaction.chunks*4]), 0);
+    printf("HW AES is: %s\n", aes);
+
+
     // Calculate in sw and see time
     if(state.mode == STRING) {
         char sw_aes[80] = {0};
