@@ -359,6 +359,7 @@ module AES_TOP(
                 write_reg_core1[7] <= aes_result_core2[31:0];
                 //aes_bram_addr <= aes_bram_write_addr + 32'h10;
                 aes_process_state <= aes_process_state + 1;
+                aes_bram_addr <= aes_bram_addr_nxt + 32'h4;
             end 
             
         // WRITE4
