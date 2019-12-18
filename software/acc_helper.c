@@ -444,12 +444,16 @@ void mm_setup(pstate* state)
 
     // Set up the OCM with data to be transferred to the BRAM
     state->ocm_addr = mmap(NULL, 
-                           65536, 
+                           /* 65536, // only 64k bytes */ 
+                           131072,
                            PROT_READ | PROT_WRITE, 
                            MAP_SHARED, 
                            dh, 
                            OCM);
-
+    
+    #ifdef DEBUG
+        printf("OCM_virtual_address = 0x%.8x\n", (uint32_t)state->ocm_addr); 
+    #endif
 }  
 
 // *************************  String setup ***************************
@@ -528,6 +532,7 @@ void file_setup(pstate* state, aes_t* transaction)
     // check file
     if (key_input == 0) {
         printf("Unable to open key file\n");
+        exit(-1);
     } else { 
          // read file
          #ifdef DEBUG
@@ -655,7 +660,7 @@ void write_aes_data(pstate* state, aes_t* transaction, uint32_t* output_addr)
          for(int page = 0; page < pages; page++) {
              // Put stuff in Buffer
              int length = size >= PAGE_SIZE ? PAGE_SIZE : size; 
-             if(size < PAGE_SIZE) { // Last data
+             if(size <= PAGE_SIZE) { // Last data
                 fread(buffer, 1, size, data_input);
 
                 // Padding
@@ -908,14 +913,14 @@ void output_file_stuff(pstate* state, aes_t* transaction) {
          #endif
          
          // Figure out size
-         long size, pages;
+         unsigned int size, pages;
          size = TRANSFER_SIZE(transaction->chunks);
          pages = size/PAGE_SIZE;
          if(size%PAGE_SIZE != 0)
              pages++;
 
          #ifdef DEBUG 
-             printf("Chunks: %d, bytes: %lu, pages: %lu\n", 
+             printf("Chunks: %d, bytes: %d, pages: %d\n", 
                      transaction->chunks, size, pages);
          #endif                    
 
@@ -923,14 +928,20 @@ void output_file_stuff(pstate* state, aes_t* transaction) {
          uint32_t *input_file;
          uint32_t mode = state->iv_string[0] == '-' ? ECB_MODE : CTR_MODE;
          if(mode == CTR_MODE) {
+             #ifdef DEBUG 
+                 printf("CTR Mode, getting input file\n");
+             #endif
+
              // get input file, need to allocate memory
-             printf("CTR Mode, getting input file\n");
              input_file = (uint32_t*)malloc(size + CHUNK_SIZE); // anticipate extra chunk
              write_aes_data(state, transaction, input_file); 
-             printf("First word of input file: 0x%08x\n", input_file[7]);
+         } else {
+             #ifdef DEBUG 
+                 printf("ECB Mode\n");
+             #endif
          }
 
-         for(int page = 0; page < pages; page++) {
+         for(unsigned int page = 0; page < pages; page++) {
              // Put stuff in Buffer
              int length = size > PAGE_SIZE ? PAGE_SIZE : size; 
 
@@ -943,13 +954,13 @@ void output_file_stuff(pstate* state, aes_t* transaction) {
                 for(int i=0; i < length/4; i++)  { // 4 32 bit words in a chunk
                     uint32_t xor = encrypted_data[i + page*(PAGE_SIZE/4)]^
                         input_file[i + page*(PAGE_SIZE/4)];
-            printf("Hex: : 0x%08x\n", input_file[i + page*(PAGE_SIZE/4)]);
+            /* printf("Hex: : 0x%08x\n", input_file[i + page*(PAGE_SIZE/4)]); */
                     buffer[i] = be32toh(xor);
                 }
              }
              
              // Write buffer to file 
-             if(size < PAGE_SIZE) {
+             if(size <= PAGE_SIZE) {
                 // Padding
                 if(state->encdec == DECRYPT) { // Only with decryption
                     assert(size%CHUNK_SIZE == 0); // output should be chunks
@@ -981,6 +992,7 @@ void output_file_stuff(pstate* state, aes_t* transaction) {
                 }
                 
                 fwrite(buffer, 1, size, output_file);
+                printf("Size: %d\n", size);
              } else {
                 fwrite(buffer, 1, PAGE_SIZE, output_file);
                 size -= PAGE_SIZE;

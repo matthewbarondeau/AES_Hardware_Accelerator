@@ -122,13 +122,18 @@ int main(int argc, char * argv[])   {
     smb(GPIO_LED, 0x5, 0x0);            // Clear error indicator
 
     // Figure out number of pages 
-    unsigned int bytes_left, pages, dma_length;
+    unsigned int bytes_left, pages, dma_length, transaction_size;
+    transaction_size = transaction.chunks;
     bytes_left = TRANSFER_SIZE(transaction.chunks);
     pages = bytes_left/PAGE_SIZE;
     if(bytes_left%PAGE_SIZE) {
         pages++;
     }
-    printf("Pages to transfer: %d\n", pages);
+
+    #ifdef DEBUG 
+        printf("Pages to transfer: %d, chunks: %d\n",
+               pages, transaction_size);
+    #endif
 
     for(unsigned int page = 0; page < pages; page++) {
 
@@ -162,33 +167,23 @@ int main(int argc, char * argv[])   {
                            " bytes: %d\n", page, dma_length);
                 #endif
 
-                cdma_transfer(&state, BRAM1, OCM, dma_length);
+                cdma_transfer(&state, 
+                              BRAM1, 
+                              OCM + page*PAGE_SIZE, 
+                              dma_length);
                    
+                // Write bram writeback as number of bytes
+                transaction.chunks = dma_length/CHUNK_SIZE;
+                transaction.bram_addr = dma_length;
+                transaction.writeback_bram_addr[0] = dma_length;
+
                 #ifdef DEBUG
                     printf("CDMA done, starting accelerator now\n");
                 #endif
    
                 start_accelerator(&state, &transaction);            
-		   /* // setup aes, one for now */
-		/* address_set(state.acc_addr, NUM_CHUNKS, transaction.chunks); // 1 chunk */
-		/* address_set(state.acc_addr, START_ADDR, 0x0); // start addr for bram */
-		/* address_set(state.acc_addr, FIRST_REG, 0x0);  // Reset aes unit */
 
-		/* // start timer */ 
-		/* smb(GPIO_TIMER_CR, GPIO_TIMER_EN_NUM, 0x1);     // Start timer */
-		/* smb(GPIO_LED, GPIO_LED_NUM, 0x1);               // Turn on the LED */
-
-		/* // start AES */
-		/* /1* address_set(state.acc_addr, SECOND_REG, ACC_MUX); *1/ */
-		/* if(state.encdec == DECRYPT) { */
-		   /*  address_set(state.acc_addr, FIRST_REG, 0x3);  // Enable aes conversion */
-		   /*  address_set(state.acc_addr, FIRST_REG, 0x2);  // Turn off start */
-		/* } else { // encrypt */
-		   /*  address_set(state.acc_addr, FIRST_REG, 0x0B);  // Enable aes conversion */
-		   /*  address_set(state.acc_addr, FIRST_REG, 0x0A);  // Turn off start */
-		/* } */ 
-
-                #ifdef DEBUG
+		#ifdef DEBUG
                     printf("Exiting child process\n");
                 #endif
 
@@ -203,18 +198,20 @@ int main(int argc, char * argv[])   {
                 // ******************************************************
                 // Check for interrupt 
                 while (!get_det_int());
-                /* reset_det_int(); */
+                reset_det_int();
                 
                 stop_accelerator(&state, &transaction);
                             
                 // do cmda read back
                 cdma_transfer(&state,
-                              (OCM + TRANSFER_SIZE(transaction.chunks)),  // Dest is ocm
-                              (BRAM1 + TRANSFER_SIZE(transaction.chunks)),// Source is BRAM
+                              (OCM + TRANSFER_SIZE(transaction_size) + 
+                               page*PAGE_SIZE),  // Dest is ocm
+                              (BRAM1 + transaction.bram_addr),// Source is BRAM
                               dma_length);
 
                 #ifdef DEBUG
-                    printf("CDMA write back done, printing result\n");
+                    printf("CDMA write back done at addr: 0x%08x\n",
+                           OCM + TRANSFER_SIZE(transaction_size) + page*PAGE_SIZE);
                 #endif
                    
             } // if chilpid ==0
@@ -233,6 +230,9 @@ int main(int argc, char * argv[])   {
     
     // Get time again
     gettimeofday(&t_acc, 0);
+
+    // Set transaction.chunks to correct value
+    transaction.chunks = transaction_size;
              
     // Output file
     if(state.output_file[0] != '-') {
@@ -291,7 +291,8 @@ int main(int argc, char * argv[])   {
         printf("Unmapping addresses\n");
     #endif
 EXIT:
-    munmap(state.ocm_addr,65536);
+    /* munmap(state.ocm_addr,65536); */
+    munmap(state.ocm_addr,131072);
     munmap(state.cdma_addr,4096);
     munmap(state.bram_addr,4096);
     munmap(state.acc_addr, 4096);

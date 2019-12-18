@@ -26,6 +26,7 @@
 #define BRAM1               0x40000000
 #define ACC                 0x44000000
 #define OCM                 0xFFFC0000
+/* #define OCM                 0xFFF00000 */
 
 // ******************************************************************** 
 // Regs for CDMA
