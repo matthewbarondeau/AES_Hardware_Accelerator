@@ -5,10 +5,10 @@
 An implementation of AES encryption using hardware acceleration on the Zedboard. Using the AES implementation from [secworks](https://github.com/secworks/aes). Final project for the University of Texas at Austin graduate course EE382N-4 Fall 2019.
 
 ### Block Diagram
-![Image of block diagram](https://github.com/matthewbarondeau/AES_Hardware_Accelerator/blob/master/images/382N_final_block_diagram.png)
+![Image of block diagram](https://github.com/matthewbarondeau/AES_Hardware_Accelerator/blob/master/images/HW_BLOCK_DIAGRAM.png)
 
 ### Address Map
-![Image of Memory Mapping](https://github.com/matthewbarondeau/AES_Hardware_Accelerator/blob/master/images/382N_final_mapping.png)
+![Image of Memory Mapping](https://github.com/matthewbarondeau/AES_Hardware_Accelerator/blob/master/images/ADDRESS_MAP.png)
 
 ### Register map
 ```
