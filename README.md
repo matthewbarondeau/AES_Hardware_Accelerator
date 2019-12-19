@@ -51,6 +51,11 @@ key   = {slv_reg13, slv_reg14, slv_reg15, slv_reg16,
 ```
 
 ### Software
-The main software interface is `aes_test.c`. The software program can be compiled using the Makefile given, and instruction on how to use the program can be accessed using `--help`. Note: Encryption and decryption for CTR mode is the same, so for decrypting ctr mode data you need to specify `enc` instead of `dec`.
+The main software interface is `aes_test.c`. The software program can be compiled using the Makefile given, and instruction on how to use the program can be accessed using `--help`. Note: Encryption and decryption for CTR mode is the same, so for decrypting ctr mode data you need to specify `enc` instead of `dec`. Also, the maximum input size for the encryption/decryption file is 128kB. This is due to the use of OCM for the cdma, which is 256kB and is split into 2. Bigger sizes could be implemented but due to memory overhead would not be advantageous. Memory could be made for efficient through use of the AXI Stream interface, and DMA straight from DDR. Another way to optimize memory would be through ACP.
 
 The kernel module for the interrupt is in the .\software\interrupts folder. It can be compiled using the Makefile in the program, and inserted using the setup script in the folder (ie. `sh setup.sh`).
+
+### Testing
+In the software folder there is a test_time.sh. This is a bash script that will measure the time of the hardware accelerated program with the openssl software version with data chunks from 1 to 100000 bytes. Timing will be the same for ecb and ctr mode, ecb was chosen arbitrarily.
+
+Furthermore our program can be directly compared against the openssl version and match (with padding!). Our program works with `-aes-256-ecb` and `-aes-256-ctr`. Note however that for openssl you must specify the key/iv values in hex, whereas the `test_aes` program takes `char`s as input for the key and iv values.
