@@ -968,7 +968,7 @@ void output_file_stuff(pstate* state, aes_t* transaction) {
              // Write buffer to file 
              if(size <= PAGE_SIZE) {
                 // Padding
-                if(state->encdec == DECRYPT) { // Only with decryption
+                if(state->encdec == DECRYPT && mode == ECB_MODE) { // Only with decryption
                     assert(size%CHUNK_SIZE == 0); // output should be chunks
                     uint8_t num_bytes = ((uint8_t*)buffer)[size - 1];
                     #ifdef DEBUG 
@@ -976,7 +976,7 @@ void output_file_stuff(pstate* state, aes_t* transaction) {
                     #endif
 
                     // Verify bytes, not done in CTR mode
-                    if(state->padding == PKCS7 && mode == ECB_MODE) {
+                    if(state->padding == PKCS7) {
                         for(unsigned int i = size-num_bytes; i < size; i++) {
                             if(((uint8_t*)buffer)[i] != num_bytes) {
                                 printf("Incorrect PKCS7 padding, padding is" \

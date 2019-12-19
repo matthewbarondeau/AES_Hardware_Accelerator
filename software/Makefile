@@ -33,7 +33,6 @@ LIBS	:= -I. -lcrypto
 
 default:
 	$(CC)  -o aes_test aes_test.c acc_helper.c $(LIBS)
-	$(CC)  -o old_aes_test old_aes_test.c acc_helper.c $(LIBS)
 clean::
 	$(RM) .skeleton* *.cmd *.o *.ko *.mod.c *.exe test_dma
 	$(RM) -R .tmp*
