@@ -49,3 +49,8 @@ slv_reg1D[31:0]= aes_bram_write_addr_start
 key   = {slv_reg13, slv_reg14, slv_reg15, slv_reg16,  
          slv_reg18, slv_reg18, slv_reg19, slv_reg20}  
 ```
+
+### Software
+The main software interface is `aes_test.c`. The software program can be compiled using the makefile given, and instruction on how to use the program can be accessed using `--help`. Note: Encryption and decryption for CTR mode is the same, so for decrypting ctr mode data you need to specify `enc` instead of `dec`.
+
+The kernel module for the interrupt is in the .\software\interrupts folder. It can be compiled using the Makefile in the program, and inserted using the setup script in the folder (ie. `sh setup.sh`).
